@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hrms
+          POSTGRES_PASSWORD: hrms
+          POSTGRES_DB: hrms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hrms"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hrms:hrms@localhost:5432/hrms_test?schema=public
+      JWT_ACCESS_SECRET: ci-only-secret-0123456789abcdef0123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check formatting
+        run: pnpm prettier --check .
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test

@@ -1,0 +1,247 @@
+// Multi-tenant data model. Every tenant-owned table carries tenantId; the API's
+// Prisma extension (src/prisma/tenant-scope.ts) adds it to every query so one
+// workspace can never read or write another's rows.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  CONSULTANT
+}
+
+enum EmployeeStatus {
+  ONBOARDING
+  ACTIVE
+  ON_NOTICE
+  EXITED
+}
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String       @unique
+  status    TenantStatus @default(TRIAL)
+  /// Branding, enabled modules, locale. Edited from the no-code Customise screen.
+  settings  Json         @default("{}")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  users        User[]
+  roles        Role[]
+  employees    Employee[]
+  departments  Department[]
+  designations Designation[]
+  locations    Location[]
+  legalEntities LegalEntity[]
+  auditLogs    AuditLog[]
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @db.Uuid
+  email        String
+  passwordHash String?
+  fullName     String
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roles    UserRole[]
+  sessions Session[]
+  employee Employee?
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  key         String
+  name        String
+  /// System roles are created with the workspace; the owner role cannot be edited.
+  isSystem    Boolean  @default(false)
+  permissions String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users  UserRole[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model UserRole {
+  tenantId String @db.Uuid
+  userId   String @db.Uuid
+  roleId   String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([tenantId])
+}
+
+/// Refresh-token sessions. Only a SHA-256 hash of the token is stored; tokens rotate on every refresh.
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LegalEntity {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  pan       String?
+  tan       String?
+  gstin     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([tenantId, name])
+}
+
+model Location {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  city      String?
+  state     String?
+  country   String   @default("IN")
+  timezone  String   @default("Asia/Kolkata")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([tenantId, name])
+}
+
+model Department {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  code      String?
+  parentId  String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Department[] @relation("DepartmentTree")
+  employees Employee[]
+
+  @@unique([tenantId, name])
+}
+
+model Designation {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  level     Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([tenantId, name])
+}
+
+model Employee {
+  id             String         @id @default(uuid()) @db.Uuid
+  tenantId       String         @db.Uuid
+  userId         String?        @unique @db.Uuid
+  employeeCode   String
+  firstName      String
+  lastName       String         @default("")
+  workEmail      String
+  phone          String?
+  dateOfJoining  DateTime       @db.Date
+  dateOfExit     DateTime?      @db.Date
+  employmentType EmploymentType @default(FULL_TIME)
+  status         EmployeeStatus @default(ONBOARDING)
+  departmentId   String?        @db.Uuid
+  designationId  String?        @db.Uuid
+  locationId     String?        @db.Uuid
+  legalEntityId  String?        @db.Uuid
+  managerId      String?        @db.Uuid
+  /// Values for tenant-defined custom fields (no-code).
+  customFields   Json           @default("{}")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department  Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation Designation? @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  location    Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  legalEntity LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
+  manager     Employee?    @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
+  reports     Employee[]   @relation("Reports")
+
+  @@unique([tenantId, employeeCode])
+  @@unique([tenantId, workEmail])
+  @@index([tenantId, status])
+  @@index([tenantId, departmentId])
+  @@index([managerId])
+}
+
+/// Append-only record of who changed what. Payroll and compliance audits depend on it.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entity     String
+  entityId   String?
+  data       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entity, entityId])
+}

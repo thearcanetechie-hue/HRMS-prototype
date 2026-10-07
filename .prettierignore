@@ -1,0 +1,3 @@
+prototype/
+pnpm-lock.yaml
+**/migrations/**
