@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { CreateEmployeeInput, ListEmployeesQuery, UpdateEmployeeInput } from '@hrms/shared';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { EmployeeAccess } from './employee-access.service';
 import { requireTenantId } from '../common/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -11,18 +12,41 @@ const employeeInclude = {
   location: { select: { id: true, name: true } },
   legalEntity: { select: { id: true, name: true } },
   manager: { select: { id: true, firstName: true, lastName: true, employeeCode: true } },
+  user: { select: { id: true, status: true } },
 } satisfies Prisma.EmployeeInclude;
+
+/** What the company directory shows to people who can't see full records. */
+const directorySelect = {
+  id: true,
+  employeeCode: true,
+  firstName: true,
+  lastName: true,
+  workEmail: true,
+  phone: true,
+  department: { select: { id: true, name: true } },
+  designation: { select: { id: true, name: true } },
+  location: { select: { id: true, name: true } },
+  manager: { select: { id: true, firstName: true, lastName: true, employeeCode: true } },
+} satisfies Prisma.EmployeeSelect;
 
 @Injectable()
 export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly access: EmployeeAccess,
   ) {}
 
+  /** Full records for `employee.read`; otherwise the directory, which leaves out people who have left. */
   async list(q: ListEmployeesQuery) {
+    const full = this.access.can('employee.read');
+    const status: Prisma.EmployeeWhereInput['status'] = full
+      ? q.status
+      : q.status === 'EXITED'
+        ? { in: [] }
+        : (q.status ?? { not: 'EXITED' });
     const where: Prisma.EmployeeWhereInput = {
-      ...(q.status ? { status: q.status } : {}),
+      ...(status ? { status } : {}),
       ...(q.departmentId ? { departmentId: q.departmentId } : {}),
       ...(q.search
         ? {
@@ -35,7 +59,7 @@ export class EmployeesService {
     const [items, total] = await Promise.all([
       this.prisma.db.employee.findMany({
         where,
-        include: employeeInclude,
+        ...(full ? { include: employeeInclude } : { select: directorySelect }),
         orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
         skip: (q.page - 1) * q.pageSize,
         take: q.pageSize,
@@ -46,6 +70,37 @@ export class EmployeesService {
   }
 
   async get(id: string) {
+    if (await this.access.canSeeFull(id)) {
+      const employee = await this.prisma.db.employee.findUnique({
+        where: { id },
+        include: employeeInclude,
+      });
+      if (employee) return employee;
+    } else if (this.access.can('directory.read')) {
+      const employee = await this.prisma.db.employee.findFirst({
+        where: { id, status: { not: 'EXITED' } },
+        select: directorySelect,
+      });
+      if (employee) return employee;
+    }
+    throw new NotFoundException('Employee not found');
+  }
+
+  /** The caller's reporting line, direct reports first. */
+  async team() {
+    const self = await this.access.selfEmployeeId();
+    if (!self) return { items: [] };
+    const ids = await this.access.reportingLine(self);
+    const items = await this.prisma.db.employee.findMany({
+      where: { id: { in: ids } },
+      include: employeeInclude,
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+    items.sort((a, b) => Number(b.managerId === self) - Number(a.managerId === self));
+    return { items: items.map((e) => ({ ...e, direct: e.managerId === self })) };
+  }
+
+  private async getFull(id: string) {
     const employee = await this.prisma.db.employee.findUnique({
       where: { id },
       include: employeeInclude,
@@ -71,7 +126,7 @@ export class EmployeesService {
   }
 
   async update(id: string, input: UpdateEmployeeInput) {
-    await this.get(id);
+    await this.getFull(id);
     if (input.managerId === id)
       throw new BadRequestException('An employee cannot manage themselves');
     await this.assertReferences(input);

@@ -23,6 +23,21 @@ enum UserStatus {
   DISABLED
 }
 
+enum Gender {
+  FEMALE
+  MALE
+  NON_BINARY
+  UNDISCLOSED
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  UNDISCLOSED
+}
+
 enum EmploymentType {
   FULL_TIME
   PART_TIME
@@ -48,14 +63,14 @@ model Tenant {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  users        User[]
-  roles        Role[]
-  employees    Employee[]
-  departments  Department[]
-  designations Designation[]
-  locations    Location[]
+  users         User[]
+  roles         Role[]
+  employees     Employee[]
+  departments   Department[]
+  designations  Designation[]
+  locations     Location[]
   legalEntities LegalEntity[]
-  auditLogs    AuditLog[]
+  auditLogs     AuditLog[]
 }
 
 model User {
@@ -69,10 +84,11 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  roles    UserRole[]
-  sessions Session[]
-  employee Employee?
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roles       UserRole[]
+  sessions    Session[]
+  employee    Employee?
+  invitations Invitation[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -110,15 +126,15 @@ model UserRole {
 
 /// Refresh-token sessions. Only a SHA-256 hash of the token is stored; tokens rotate on every refresh.
 model Session {
-  id         String    @id @default(uuid()) @db.Uuid
-  tenantId   String    @db.Uuid
-  userId     String    @db.Uuid
-  tokenHash  String    @unique
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  userAgent  String?
-  ip         String?
-  createdAt  DateTime  @default(now())
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -212,14 +228,15 @@ model Employee {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  department  Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  designation Designation? @relation(fields: [designationId], references: [id], onDelete: SetNull)
-  location    Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  legalEntity LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
-  manager     Employee?    @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
-  reports     Employee[]   @relation("Reports")
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department  Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation Designation?     @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  location    Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  legalEntity LegalEntity?     @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
+  manager     Employee?        @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
+  reports     Employee[]       @relation("Reports")
+  profile     EmployeeProfile?
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -228,17 +245,72 @@ model Employee {
   @@index([managerId])
 }
 
+/// Personal, statutory and bank details. Identifier columns ending in Enc hold
+/// AES-256-GCM ciphertext under a per-workspace key (src/crypto/field-crypto.ts);
+/// the *Last4 columns keep the masked hint the UI shows to people who can't see the value.
+model EmployeeProfile {
+  id                     String         @id @default(uuid()) @db.Uuid
+  tenantId               String         @db.Uuid
+  employeeId             String         @unique @db.Uuid
+  dateOfBirth            DateTime?      @db.Date
+  gender                 Gender?
+  maritalStatus          MaritalStatus?
+  bloodGroup             String?
+  personalEmail          String?
+  personalPhone          String?
+  currentAddress         Json?
+  permanentAddress       Json?
+  emergencyContacts      Json           @default("[]")
+  panEnc                 String?
+  panLast4               String?
+  aadhaarEnc             String?
+  aadhaarLast4           String?
+  uanEnc                 String?
+  uanLast4               String?
+  esicNumberEnc          String?
+  esicNumberLast4        String?
+  bankAccountNumberEnc   String?
+  bankAccountNumberLast4 String?
+  bankIfsc               String?
+  bankName               String?
+  bankAccountHolder      String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+/// One-time link that lets an invited person set a password. Only a SHA-256 hash is stored.
+model Invitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  userId      String    @db.Uuid
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+}
+
 /// Append-only record of who changed what. Payroll and compliance audits depend on it.
 model AuditLog {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String   @db.Uuid
-  actorId    String?  @db.Uuid
-  action     String
-  entity     String
-  entityId   String?
-  data       Json?
-  ip         String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  actorId   String?  @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  data      Json?
+  ip        String?
+  createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

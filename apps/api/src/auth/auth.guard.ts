@@ -11,7 +11,7 @@ import { isPermission, Permission } from '@hrms/shared';
 import type { Request } from 'express';
 import { requestContext } from '../common/request-context';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuthUser, IS_PUBLIC, PERMISSIONS_KEY } from './decorators';
+import { ANY_PERMISSIONS_KEY, AuthUser, IS_PUBLIC, PERMISSIONS_KEY } from './decorators';
 
 export interface AccessTokenPayload {
   sub: string;
@@ -72,7 +72,11 @@ export class AuthGuard implements CanActivate {
     };
 
     const required = this.reflector.getAllAndOverride<Permission[]>(PERMISSIONS_KEY, targets);
-    if (required?.some((p) => !permissions.has(p))) {
+    const anyOf = this.reflector.getAllAndOverride<Permission[]>(ANY_PERMISSIONS_KEY, targets);
+    if (
+      required?.some((p) => !permissions.has(p)) ||
+      (anyOf && !anyOf.some((p) => permissions.has(p)))
+    ) {
       throw new ForbiddenException('You do not have permission to do this');
     }
     return true;

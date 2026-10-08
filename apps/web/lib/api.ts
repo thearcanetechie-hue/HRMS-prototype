@@ -60,6 +60,7 @@ export interface Me {
   employee: { id: string; employeeCode: string; firstName: string; lastName: string } | null;
 }
 
+/** Directory entries leave out the fields marked optional; full records include them. */
 export interface Employee {
   id: string;
   employeeCode: string;
@@ -67,13 +68,44 @@ export interface Employee {
   lastName: string;
   workEmail: string;
   phone: string | null;
-  dateOfJoining: string;
-  employmentType: string;
-  status: 'ONBOARDING' | 'ACTIVE' | 'ON_NOTICE' | 'EXITED';
+  dateOfJoining?: string;
+  employmentType?: string;
+  status?: 'ONBOARDING' | 'ACTIVE' | 'ON_NOTICE' | 'EXITED';
   department: { id: string; name: string } | null;
   designation: { id: string; name: string } | null;
   location: { id: string; name: string } | null;
   manager: { id: string; firstName: string; lastName: string } | null;
+  user?: { id: string; status: 'INVITED' | 'ACTIVE' | 'DISABLED' } | null;
+  direct?: boolean;
+}
+
+export interface Address {
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  pincode: string;
+}
+
+export type IdentifierKey = 'pan' | 'aadhaar' | 'uan' | 'esicNumber' | 'bankAccountNumber';
+
+export interface Profile {
+  employeeId: string;
+  dateOfBirth: string | null;
+  gender: string | null;
+  maritalStatus: string | null;
+  bloodGroup: string | null;
+  personalEmail: string | null;
+  personalPhone: string | null;
+  currentAddress: Address | null;
+  permanentAddress: Address | null;
+  emergencyContacts: { name: string; relation: string; phone: string }[];
+  bankIfsc: string | null;
+  bankName: string | null;
+  bankAccountHolder: string | null;
+  identifiers: Record<IdentifierKey, { last4: string | null; value?: string | null }>;
+  unmasked: boolean;
+  updatedAt: string | null;
 }
 
 export interface Paged<T> {

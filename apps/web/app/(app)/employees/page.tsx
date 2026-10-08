@@ -3,22 +3,19 @@
 import { createEmployeeSchema, EMPLOYMENT_TYPES } from '@hrms/shared';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Field } from '@/components/auth-layout';
+import Link from 'next/link';
 import { Icon } from '@/components/icon';
+import { InviteButton } from '@/components/invite-button';
 import { api, ApiError, Employee, Named, Paged } from '@/lib/api';
+import { formatDate, initials, STATUS_PILL, titleCase as label } from '@/lib/format';
 import { FieldErrors, firstErrors, validate } from '@/lib/forms';
 import { useSession } from '@/lib/session';
 
-const STATUS_PILL: Record<Employee['status'], string> = {
-  ACTIVE: 'good',
-  ONBOARDING: 'acc',
-  ON_NOTICE: 'warn',
-  EXITED: 'bad',
-};
-
-const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ');
-
 export default function EmployeesPage() {
   const { can } = useSession();
+  // People without employee.read get the directory: no joining date, status or access columns.
+  const full = can('employee.read');
+  const manage = can('employee.manage');
   const [search, setSearch] = useState('');
   const [data, setData] = useState<Paged<Employee> | null>(null);
   const [error, setError] = useState('');
@@ -43,7 +40,7 @@ export default function EmployeesPage() {
     <>
       <div className="page-h">
         <div>
-          <h1>Employees</h1>
+          <h1>{full ? 'Employees' : 'Directory'}</h1>
           <p>{data ? `${data.total} ${data.total === 1 ? 'person' : 'people'}` : 'Loading…'}</p>
         </div>
         <div className="actions">
@@ -79,40 +76,48 @@ export default function EmployeesPage() {
                 <th>Department</th>
                 <th>Designation</th>
                 <th>Location</th>
-                <th>Joined</th>
-                <th>Status</th>
+                {full && <th>Joined</th>}
+                {full && <th>Status</th>}
+                {manage && <th>Access</th>}
               </tr>
             </thead>
             <tbody>
               {data?.items.map((e) => (
                 <tr key={e.id}>
                   <td>
-                    <div className="who">
-                      <div className="avatar sm alt">
-                        {(e.firstName[0] ?? '') + (e.lastName[0] ?? '')}
-                      </div>
+                    <Link
+                      href={`/employees/${e.id}`}
+                      className="who"
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                      <div className="avatar sm alt">{initials(e.firstName, e.lastName)}</div>
                       <div>
                         <div className="n">
                           {e.firstName} {e.lastName}
                         </div>
                         <div className="e">{e.workEmail}</div>
                       </div>
-                    </div>
+                    </Link>
                   </td>
                   <td className="num">{e.employeeCode}</td>
                   <td>{e.department?.name ?? '–'}</td>
                   <td>{e.designation?.name ?? '–'}</td>
                   <td>{e.location?.name ?? '–'}</td>
-                  <td className="num">
-                    {new Date(e.dateOfJoining).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </td>
-                  <td>
-                    <span className={`pill ${STATUS_PILL[e.status]}`}>{label(e.status)}</span>
-                  </td>
+                  {full && (
+                    <td className="num">{e.dateOfJoining ? formatDate(e.dateOfJoining) : '–'}</td>
+                  )}
+                  {full && (
+                    <td>
+                      {e.status && (
+                        <span className={`pill ${STATUS_PILL[e.status]}`}>{label(e.status)}</span>
+                      )}
+                    </td>
+                  )}
+                  {manage && (
+                    <td>
+                      <InviteButton employee={e} onInvited={() => void load()} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

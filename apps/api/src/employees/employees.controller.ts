@@ -7,7 +7,7 @@ import {
   updateEmployeeSchema,
   UpdateEmployeeInput,
 } from '@hrms/shared';
-import { RequirePermissions } from '../auth/decorators';
+import { RequireAnyPermission, RequirePermissions } from '../auth/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import { EmployeesService } from './employees.service';
 
@@ -16,13 +16,19 @@ export class EmployeesController {
   constructor(private readonly employees: EmployeesService) {}
 
   @Get()
-  @RequirePermissions('employee.read')
+  @RequireAnyPermission('employee.read', 'directory.read')
   list(@Query(new ZodPipe(listEmployeesQuerySchema)) query: ListEmployeesQuery) {
     return this.employees.list(query);
   }
 
+  /** Everyone in the caller's reporting line. Declared before :id so "team" isn't read as an id. */
+  @Get('team')
+  @RequirePermissions('team.read')
+  team() {
+    return this.employees.team();
+  }
+
   @Get(':id')
-  @RequirePermissions('employee.read')
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.employees.get(id);
   }

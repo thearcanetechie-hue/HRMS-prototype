@@ -6,9 +6,29 @@ import { ReactNode, useState } from 'react';
 import { Icon, IconName } from '@/components/icon';
 import { RequireSession, useSession } from '@/lib/session';
 
-const NAV: { href: string; label: string; icon: IconName; permission?: string }[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'home' },
-  { href: '/employees', label: 'Employees', icon: 'users', permission: 'employee.read' },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: IconName;
+  show: (can: (p: string) => boolean, hasEmployee: boolean) => boolean;
+};
+
+const NAV: NavItem[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: 'home', show: () => true },
+  { href: '/profile', label: 'My profile', icon: 'doc', show: (_, hasEmployee) => hasEmployee },
+  {
+    href: '/team',
+    label: 'My team',
+    icon: 'target',
+    show: (can) => can('team.read') && !can('employee.read'),
+  },
+  { href: '/employees', label: 'Employees', icon: 'users', show: (can) => can('employee.read') },
+  {
+    href: '/employees',
+    label: 'Directory',
+    icon: 'users',
+    show: (can) => !can('employee.read') && can('directory.read'),
+  },
 ];
 
 function Shell({ children }: { children: ReactNode }) {
@@ -35,10 +55,10 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="nav" aria-label="Main">
-          <div className="nav-label">MANAGE</div>
-          {NAV.filter((n) => !n.permission || can(n.permission)).map((n) => (
+          <div className="nav-label">{can('employee.read') ? 'MANAGE' : 'MY WORK'}</div>
+          {NAV.filter((n) => n.show(can, Boolean(me.employee))).map((n) => (
             <Link
-              key={n.href}
+              key={n.label}
               href={n.href}
               aria-current={pathname.startsWith(n.href) ? 'page' : undefined}
               onClick={() => setOpen(false)}

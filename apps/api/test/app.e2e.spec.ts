@@ -1,39 +1,17 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { randomBytes } from 'node:crypto';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/bootstrap';
+import { createApp, password, signup as signupFull, suffix } from './helpers';
 
-process.env.AUTH_RATE_LIMIT = '1000';
-
-const suffix = () => randomBytes(4).toString('hex');
-const password = 'Sup3rSecretPass';
-
-async function signup(app: INestApplication, workspace = `acme-${suffix()}`) {
-  const email = `owner@${workspace}.test`;
-  const res = await request(app.getHttpServer())
-    .post('/api/auth/signup')
-    .send({ companyName: 'Acme Pvt Ltd', workspace, fullName: 'Ada Lovelace', email, password })
-    .expect(201);
-  return {
-    workspace,
-    email,
-    token: res.body.accessToken as string,
-    cookie: res.headers['set-cookie'] as unknown as string[],
-  };
-}
+const signup = (app: INestApplication, workspace?: string) => signupFull(app, workspace);
 
 describe('HRMS API', () => {
   let app: INestApplication;
   const prisma = new PrismaClient();
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = configureApp(moduleRef.createNestApplication(), 'http://localhost:3000');
-    await app.init();
+    app = await createApp();
   });
 
   afterAll(async () => {

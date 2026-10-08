@@ -132,3 +132,158 @@ export const updateRoleSchema = createRoleSchema.omit({ key: true }).partial();
 export const assignRolesSchema = z.object({
   roleIds: z.array(z.string().uuid()).min(1).max(20),
 });
+
+// ---------- Core HR: invites and profiles ----------
+
+export const acceptInviteSchema = z.object({
+  token: z.string().min(20).max(200),
+  password,
+});
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
+
+export const GENDERS = ['FEMALE', 'MALE', 'NON_BINARY', 'UNDISCLOSED'] as const;
+export const MARITAL_STATUSES = [
+  'SINGLE',
+  'MARRIED',
+  'DIVORCED',
+  'WIDOWED',
+  'UNDISCLOSED',
+] as const;
+export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
+
+const addressSchema = z.object({
+  line1: z.string().trim().max(160).default(''),
+  line2: z.string().trim().max(160).default(''),
+  city: z.string().trim().max(80).default(''),
+  state: z.string().trim().max(80).default(''),
+  pincode: z
+    .string()
+    .trim()
+    .regex(/^$|^[1-9][0-9]{5}$/, 'Enter a 6-digit PIN code')
+    .default(''),
+});
+
+const emergencyContactSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  relation: z.string().trim().max(40).default(''),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9 -]{7,20}$/, 'Enter a valid phone number'),
+});
+
+// Verhoeff checksum used by Aadhaar numbers; catches single-digit typos and most swaps.
+const VERHOEFF_D = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+  [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+  [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+  [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+  [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+  [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+  [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+  [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+  [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+];
+const VERHOEFF_P = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+  [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+  [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+  [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+  [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+  [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+  [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
+];
+
+export function isValidVerhoeff(digits: string): boolean {
+  let c = 0;
+  [...digits].reverse().forEach((ch, i) => {
+    c = VERHOEFF_D[c]![VERHOEFF_P[i % 8]![Number(ch)]!]!;
+  });
+  return c === 0;
+}
+
+const blankToNull = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
+
+/** Statutory and bank identifiers are stored encrypted; null clears a value. */
+const secret = (schema: z.ZodType<string, z.ZodTypeDef, string>) =>
+  z.preprocess(blankToNull, schema.nullish());
+
+export const profileSchema = z.object({
+  dateOfBirth: z.preprocess(blankToNull, z.coerce.date().nullish()),
+  gender: z.enum(GENDERS).nullish(),
+  maritalStatus: z.enum(MARITAL_STATUSES).nullish(),
+  bloodGroup: z.enum(BLOOD_GROUPS).nullish(),
+  personalEmail: z.preprocess(blankToNull, email.nullish()),
+  personalPhone: z.preprocess(
+    blankToNull,
+    z
+      .string()
+      .trim()
+      .regex(/^\+?[0-9 -]{7,20}$/, 'Enter a valid phone number')
+      .nullish(),
+  ),
+  currentAddress: addressSchema.nullish(),
+  permanentAddress: addressSchema.nullish(),
+  emergencyContacts: z.array(emergencyContactSchema).max(5).optional(),
+  pan: secret(
+    z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Enter a valid PAN'),
+  ),
+  aadhaar: secret(
+    z
+      .string()
+      .trim()
+      .transform((v) => v.replace(/[\s-]/g, ''))
+      .pipe(
+        z
+          .string()
+          .regex(/^[2-9][0-9]{11}$/, 'Enter a valid 12-digit Aadhaar number')
+          .refine(isValidVerhoeff, 'This Aadhaar number has a typo'),
+      ),
+  ),
+  uan: secret(
+    z
+      .string()
+      .trim()
+      .regex(/^[0-9]{12}$/, 'Enter a valid 12-digit UAN'),
+  ),
+  esicNumber: secret(
+    z
+      .string()
+      .trim()
+      .regex(/^[0-9]{10,17}$/, 'Enter a valid ESIC number'),
+  ),
+  bankAccountNumber: secret(
+    z
+      .string()
+      .trim()
+      .regex(/^[0-9]{9,18}$/, 'Enter a valid account number'),
+  ),
+  bankIfsc: z.preprocess(
+    blankToNull,
+    z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Enter a valid IFSC')
+      .nullish(),
+  ),
+  bankName: z.preprocess(blankToNull, z.string().trim().max(120).nullish()),
+  bankAccountHolder: z.preprocess(blankToNull, z.string().trim().max(120).nullish()),
+});
+export type ProfileInput = z.infer<typeof profileSchema>;
+
+/** Identifiers that are encrypted at rest and masked unless the viewer may see them. */
+export const SENSITIVE_PROFILE_FIELDS = [
+  'pan',
+  'aadhaar',
+  'uan',
+  'esicNumber',
+  'bankAccountNumber',
+] as const;
+export type SensitiveProfileField = (typeof SENSITIVE_PROFILE_FIELDS)[number];

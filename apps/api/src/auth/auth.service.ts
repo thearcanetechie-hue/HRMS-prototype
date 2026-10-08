@@ -148,11 +148,7 @@ export class AuthService {
     });
   }
 
-  private async issueTokens(
-    userId: string,
-    tenantId: string,
-    client: ClientInfo,
-  ): Promise<IssuedTokens> {
+  async issueTokens(userId: string, tenantId: string, client: ClientInfo): Promise<IssuedTokens> {
     const payload: AccessTokenPayload = { sub: userId, tid: tenantId };
     const accessToken = await this.jwt.signAsync(payload);
     const refreshToken = randomBytes(32).toString('base64url');

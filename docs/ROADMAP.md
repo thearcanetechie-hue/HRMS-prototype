@@ -37,6 +37,8 @@ and can be upgraded once the modules are in.
 
 ### Phase 1: Core HR (week 1)
 
+Done: invites, self-service profile, encrypted identifiers, manager-scoped access. Next: documents, onboarding/offboarding, custom fields.
+
 - Invite employees to sign in; employee self-service profile
 - Full employee profile: personal, family, bank, statutory IDs (PAN, Aadhaar, UAN, ESIC) with field-level encryption
 - Manager-scoped data access (managers see their reporting line)

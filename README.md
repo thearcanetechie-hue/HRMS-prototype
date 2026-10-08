@@ -30,13 +30,16 @@ Needs Node 22, pnpm 10 and PostgreSQL 16 (or `docker compose up db`).
 
 ```bash
 pnpm install
-cp .env.example apps/api/.env       # adjust DATABASE_URL and JWT_ACCESS_SECRET
+cp .env.example apps/api/.env       # set DATABASE_URL, JWT_ACCESS_SECRET and DATA_ENCRYPTION_KEY
 pnpm db:migrate                     # create the schema
-pnpm db:seed                        # demo workspace: demo / owner@demo.test / DemoPass123
+pnpm db:seed                        # demo workspace, see below
 pnpm dev                            # API on :4000, web on :3000
 ```
 
 The web app proxies `/api/*` to the API, so open http://localhost:3000.
+
+Demo logins (workspace `demo`, password `DemoPass123`): `owner@demo.test` (Owner),
+`vikram@demo.test` (Manager), `priya@demo.test` (Employee).
 
 ## Checks
 
@@ -55,3 +58,17 @@ extension that adds that `tenantId` to every query and every write
 (`apps/api/src/prisma/tenant-scope.ts`). Referenced ids (department, manager, and so on)
 are checked through the same scoped client before writing, so a workspace can't link to
 another workspace's rows.
+
+## Who sees what
+
+| Permission                | Sees                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `directory.read`          | Everyone's name, role, department and work contact (not people who have left) |
+| `team.read`               | Full records of their whole reporting line                                    |
+| `employee.read`           | Full records of everyone                                                      |
+| `employee.sensitive.read` | Unmasked PAN, Aadhaar, UAN, ESIC and bank numbers                             |
+
+Everyone sees their own record and profile in full. PAN, Aadhaar, UAN, ESIC and bank
+account numbers are encrypted with AES-256-GCM under a key derived per workspace from
+`DATA_ENCRYPTION_KEY` (`apps/api/src/crypto/field-crypto.ts`); others see only the last four
+characters. Back that key up: without it those fields cannot be read.

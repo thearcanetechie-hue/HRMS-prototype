@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { PrismaExceptionFilter } from './common/prisma-exception.filter';
 import { requestContext } from './common/request-context';
 import { validateEnv } from './config';
+import { CryptoModule } from './crypto/crypto.module';
 import { EmployeesModule } from './employees/employees.module';
 import { HealthController } from './health/health.controller';
 import { OrgModule } from './org/org.module';
@@ -20,6 +21,7 @@ import { RolesModule } from './roles/roles.module';
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     PrismaModule,
+    CryptoModule,
     AuthModule,
     AuditModule,
     OrgModule,

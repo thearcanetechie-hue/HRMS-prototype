@@ -42,7 +42,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    return this.respond(res, await this.auth.signup(body, clientInfo(req)));
+    return AuthController.respond(res, await this.auth.signup(body, clientInfo(req)));
   }
 
   @Public()
@@ -53,7 +53,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    return this.respond(res, await this.auth.login(body, clientInfo(req)));
+    return AuthController.respond(res, await this.auth.login(body, clientInfo(req)));
   }
 
   @Public()
@@ -64,7 +64,7 @@ export class AuthController {
     const token: string | undefined = req.cookies?.[REFRESH_COOKIE];
     if (!token) throw new UnauthorizedException();
     try {
-      return this.respond(res, await this.auth.refresh(token, clientInfo(req)));
+      return AuthController.respond(res, await this.auth.refresh(token, clientInfo(req)));
     } catch (err) {
       res.clearCookie(REFRESH_COOKIE, { path: COOKIE_PATH });
       throw err;
@@ -95,7 +95,8 @@ export class AuthController {
     return { user, tenant, employee };
   }
 
-  private respond(res: Response, tokens: IssuedTokens) {
+  /** Sets the refresh cookie and returns the access token. Shared with invite acceptance. */
+  static respond(res: Response, tokens: IssuedTokens) {
     res.cookie(REFRESH_COOKIE, tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

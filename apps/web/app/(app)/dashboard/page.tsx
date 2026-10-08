@@ -61,19 +61,51 @@ export default function DashboardPage() {
           <p>Here&apos;s your workspace at a glance.</p>
         </div>
       </div>
-      <div className="grid g4" style={{ marginBottom: 18 }}>
-        {kpis.map(([label, value, icon], i) => (
-          <div key={label} className={`card kpi lift ${i === 0 ? 'hot' : ''}`}>
-            <div className="label">
-              <span className="kpi-ico">
-                <Icon name={icon} size={16} />
-              </span>
-              {label}
+      {!can('employee.read') && (
+        <div className="grid g2" style={{ marginBottom: 18 }}>
+          <a
+            href="/profile"
+            className="card lift"
+            style={{ color: 'inherit', textDecoration: 'none' }}
+          >
+            <div className="card-h">
+              <h3>My profile</h3>
+              <Icon name="doc" />
             </div>
-            <div className="value num">{value ?? '–'}</div>
-          </div>
-        ))}
-      </div>
+            <p className="muted" style={{ margin: 0 }}>
+              Add your PAN, Aadhaar, bank account and emergency contact.
+            </p>
+          </a>
+          <a
+            href={can('team.read') ? '/team' : '/employees'}
+            className="card lift"
+            style={{ color: 'inherit', textDecoration: 'none' }}
+          >
+            <div className="card-h">
+              <h3>{can('team.read') ? 'My team' : 'Directory'}</h3>
+              <Icon name="users" />
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              {can('team.read') ? 'See everyone in your reporting line.' : 'Find a colleague.'}
+            </p>
+          </a>
+        </div>
+      )}
+      {can('employee.read') && (
+        <div className="grid g4" style={{ marginBottom: 18 }}>
+          {kpis.map(([label, value, icon], i) => (
+            <div key={label} className={`card kpi lift ${i === 0 ? 'hot' : ''}`}>
+              <div className="label">
+                <span className="kpi-ico">
+                  <Icon name={icon} size={16} />
+                </span>
+                {label}
+              </div>
+              <div className="value num">{value ?? '–'}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="card">
         <div className="card-h">
           <h3>Modules</h3>

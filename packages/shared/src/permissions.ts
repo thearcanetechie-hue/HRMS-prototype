@@ -9,8 +9,11 @@ export const PERMISSIONS = {
   'role.manage': 'Create, edit and assign roles',
   'org.read': 'View departments, designations, locations and legal entities',
   'org.manage': 'Create and edit departments, designations, locations and legal entities',
-  'employee.read': 'View the employee directory',
-  'employee.manage': 'Add and edit employee records',
+  'directory.read': 'See the company directory (names, roles, departments, work contact)',
+  'team.read': 'See full records of people in your reporting line',
+  'employee.read': 'See full records of every employee',
+  'employee.manage': 'Add and edit employee records and invite people to sign in',
+  'employee.sensitive.read': 'See unmasked PAN, Aadhaar, UAN, ESIC and bank details',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -35,13 +38,15 @@ export const SYSTEM_ROLES: Record<
       'role.manage',
       'org.read',
       'org.manage',
+      'directory.read',
       'employee.read',
       'employee.manage',
+      'employee.sensitive.read',
       'audit.read',
     ],
   },
-  manager: { name: 'Manager', permissions: ['org.read', 'employee.read'] },
-  employee: { name: 'Employee', permissions: ['org.read', 'employee.read'] },
+  manager: { name: 'Manager', permissions: ['org.read', 'directory.read', 'team.read'] },
+  employee: { name: 'Employee', permissions: ['org.read', 'directory.read'] },
 };
 
 export type SystemRoleKey = keyof typeof SYSTEM_ROLES;

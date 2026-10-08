@@ -10,6 +10,11 @@ export const PERMISSIONS_KEY = 'permissions';
 export const RequirePermissions = (...permissions: Permission[]) =>
   SetMetadata(PERMISSIONS_KEY, permissions);
 
+export const ANY_PERMISSIONS_KEY = 'anyPermissions';
+/** Caller needs at least one of the listed permissions; the service narrows what they see. */
+export const RequireAnyPermission = (...permissions: Permission[]) =>
+  SetMetadata(ANY_PERMISSIONS_KEY, permissions);
+
 export interface AuthUser {
   id: string;
   tenantId: string;
