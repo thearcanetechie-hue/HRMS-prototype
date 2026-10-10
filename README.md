@@ -1,42 +1,74 @@
-# HRMS Workspace — UI Prototype
+# HRMS Workspace
 
-A clickable front-end prototype of a multi-tenant HRMS SaaS for Indian companies (2 to 10,000 employees). Black-and-orange theme with depth cards and glass, gradient buttons.
+A multi-tenant HRMS SaaS for Indian companies (2 to 10,000 employees). The build plan and
+module roadmap are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-> Prototype only: all names, figures and dates are fictional sample data. There is no backend; state resets on reload.
+The original clickable UI prototype is kept in [`prototype/index.html`](prototype/index.html)
+(open it in a browser, no build step); the web app reuses its design system.
 
-## Run it
+## Repository layout
 
-No build step. Open `index.html` in a browser, or serve the folder:
-
-```bash
-npx serve .
-# or
-python3 -m http.server 8080
+```
+apps/api         NestJS API, Prisma schema and migrations, e2e tests
+apps/web         Next.js web app (HR admin + employee self-service)
+packages/shared  Permission catalogue and Zod schemas used by both apps
+prototype        The original single-file UI prototype
+docs             Roadmap and design notes
 ```
 
-To publish with GitHub Pages: push this folder, then **Settings → Pages → Deploy from branch** and pick the branch and `/ (root)`.
+## Run it with Docker
 
-## What's inside
+```bash
+docker compose up --build
+```
 
-**HR admin view**
-- Login and sign-up
-- Dashboard: KPIs, attendance trend, pending approvals (approve / reject), next payroll, compliance calendar, team mood
-- Employees: search, department filters, "Add employee" drawer with validation
-- Attendance & Leave: leave approvals, October calendar with holidays
-- Payroll & Compliance: 5-step payroll run, statutory breakdown, anomaly review
-- Performance, Meetings (Teams / Google Meet), Notifications
-- Customise (no-code): toggle modules, change brand colour live, add custom fields, extend approval workflow
+Open http://localhost:3000 and create a workspace.
 
-**Employee view** (switch in the sidebar)
-- Work Hub: check-in / check-out, mood check-in, tasks, leave balance, app launcher
-- Request templates, Calendar & Holidays, "What's good today" feed
+## Local development
 
-**AI assistant** (scripted demo answers for the suggested prompts)
+Needs Node 22, pnpm 10 and PostgreSQL 16 (or `docker compose up db`).
 
-## Tech
+```bash
+pnpm install
+cp .env.example apps/api/.env       # set DATABASE_URL, JWT_ACCESS_SECRET and DATA_ENCRYPTION_KEY
+pnpm db:migrate                     # create the schema
+pnpm db:seed                        # demo workspace, see below
+pnpm dev                            # API on :4000, web on :3000
+```
 
-Single HTML file: vanilla JavaScript, CSS custom properties, inline SVG icons, Google Fonts (Outfit, Manrope, IBM Plex Mono). Theme tokens are at the top of the `<style>` block (`--acc`, `--acc2`, `--acc-rgb` control the accent colour).
+The web app proxies `/api/*` to the API, so open http://localhost:3000.
 
-## Next steps
+Demo logins (workspace `demo`, password `DemoPass123`): `owner@demo.test` (Owner),
+`vikram@demo.test` (Manager), `priya@demo.test` (Employee).
 
-Port screens to React components and connect them to the NestJS + PostgreSQL backend.
+## Checks
+
+```bash
+pnpm build && pnpm typecheck && pnpm test
+```
+
+`pnpm test` runs the API's end-to-end tests against the database in `DATABASE_URL`,
+including the checks that one workspace cannot see or change another's data.
+
+## How multi-tenancy works
+
+Every workspace-owned table has a `tenantId`. After the auth guard verifies the caller, it
+stores their workspace in a per-request context; `PrismaService.db` is a Prisma client
+extension that adds that `tenantId` to every query and every write
+(`apps/api/src/prisma/tenant-scope.ts`). Referenced ids (department, manager, and so on)
+are checked through the same scoped client before writing, so a workspace can't link to
+another workspace's rows.
+
+## Who sees what
+
+| Permission                | Sees                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `directory.read`          | Everyone's name, role, department and work contact (not people who have left) |
+| `team.read`               | Full records of their whole reporting line                                    |
+| `employee.read`           | Full records of everyone                                                      |
+| `employee.sensitive.read` | Unmasked PAN, Aadhaar, UAN, ESIC and bank numbers                             |
+
+Everyone sees their own record and profile in full. PAN, Aadhaar, UAN, ESIC and bank
+account numbers are encrypted with AES-256-GCM under a key derived per workspace from
+`DATA_ENCRYPTION_KEY` (`apps/api/src/crypto/field-crypto.ts`); others see only the last four
+characters. Back that key up: without it those fields cannot be read.
