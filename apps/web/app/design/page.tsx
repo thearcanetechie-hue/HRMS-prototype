@@ -7,6 +7,7 @@ import { ThemeToggle } from '@/components/theme';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Field, Input, Select } from '@/components/ui/input';
@@ -58,6 +59,10 @@ export default function DesignPage() {
         </Card>
         <Card className="flex items-center justify-center">
           <ProgressRing value={76} label="Attendance" />
+        </Card>
+
+        <Card>
+          <Calendar />
         </Card>
 
         <Card>

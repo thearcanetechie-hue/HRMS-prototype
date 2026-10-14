@@ -22,9 +22,10 @@ import {
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Calendar } from '@/components/ui/calendar';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { IconTile, PageHeader } from '@/components/ui/page';
-import { ProgressRing } from '@/components/ui/progress-ring';
+
 import { api, Named, Paged, Employee } from '@/lib/api';
 import { useSession } from '@/lib/session';
 
@@ -74,7 +75,6 @@ export default function DashboardPage() {
     ['Onboarding', stats?.onboarding, UserPlus],
     ['Departments', stats?.departments, Building2],
   ];
-  const activePct = stats && stats.total ? (stats.active / stats.total) * 100 : 0;
 
   return (
     <>
@@ -117,7 +117,7 @@ export default function DashboardPage() {
       )}
 
       {can('employee.read') && (
-        <div className="mb-6 grid gap-5 lg:grid-cols-[1fr_auto]">
+        <div className="mb-6 grid gap-5 lg:grid-cols-[1fr_320px]">
           <div className="grid grid-cols-2 gap-5">
             {kpis.map(([label, value, Icon]) => (
               <Card key={label} className="flex items-center gap-4">
@@ -133,11 +133,9 @@ export default function DashboardPage() {
               </Card>
             ))}
           </div>
-          <Card className="flex items-center justify-center gap-6 lg:flex-col lg:gap-4">
-            <ProgressRing value={activePct} label="Active" />
-            <p className="max-w-40 text-center text-[13px] text-muted-foreground">
-              Share of people who are active today
-            </p>
+          {/* Desktop only: on phones the KPI tiles are enough above the fold. */}
+          <Card className="hidden lg:block">
+            <Calendar />
           </Card>
         </div>
       )}
