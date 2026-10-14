@@ -39,7 +39,7 @@ export default function DesignPage() {
       <PageHeader
         eyebrow="Foundations"
         title="Colours, surfaces and controls"
-        description="Light mode is soft grey with teal; dark mode is near-black with gold. Every screen uses these pieces."
+        description="Light mode is soft grey with sky blue; dark mode is near-black with gold. Every screen uses these pieces."
       />
 
       <div className="grid gap-6 lg:grid-cols-3">

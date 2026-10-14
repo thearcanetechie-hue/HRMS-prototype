@@ -16,11 +16,11 @@
   --muted-foreground: #586274;
   --border: #d3dae3;
 
-  --primary: #0e817c;
-  --primary-strong: #0a6b67;
-  --primary-soft: #45bdb5;
+  --primary: #0b6fae;
+  --primary-strong: #095a8e;
+  --primary-soft: #4fbdf0;
   --primary-foreground: #ffffff;
-  --ring: #0e817c;
+  --ring: #0b6fae;
 
   --success: #17845a;
   --warning: #a35f00;
@@ -35,7 +35,7 @@
   --inset: inset 4px 4px 9px rgb(var(--shade) / 0.5), inset -4px -4px 9px rgb(var(--light) / 0.85);
   --inset-sm:
     inset 2px 2px 5px rgb(var(--shade) / 0.5), inset -2px -2px 5px rgb(var(--light) / 0.85);
-  --glow: 0 6px 16px rgb(14 129 124 / 0.35);
+  --glow: 0 6px 16px rgb(11 111 174 / 0.35);
 
   color-scheme: light;
 }

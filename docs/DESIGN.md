@@ -11,7 +11,7 @@ Open `/design` in the running app to see every piece in the current theme.
 |        | Light                                                     | Dark                                    |
 | ------ | --------------------------------------------------------- | --------------------------------------- |
 | Look   | Soft grey, neumorphic: raised cards and pressed-in fields | Near-black bento cards with a warm glow |
-| Accent | Teal                                                      | Gold                                    |
+| Accent | Sky blue                                                  | Gold                                    |
 
 The theme follows the device setting until the person flips the switch in the top bar
 (`next-themes`, stored per browser). Both themes are defined as CSS variables in

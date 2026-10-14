@@ -8,7 +8,7 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // Teal pill with a soft glow: the one main action on a screen.
+        // Accent-coloured pill with a soft glow: the one main action on a screen.
         primary:
           'bg-gradient-to-b from-primary to-primary-strong text-primary-foreground shadow-glow hover:brightness-105 active:translate-y-px active:shadow-inset-sm',
         // Raised grey button that presses in when clicked.
