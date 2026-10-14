@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ProfileForm } from '@/components/profile-form';
+import { Banner, PageHeader } from '@/components/ui/page';
 import { api, ApiError, Profile } from '@/lib/api';
 import { useSession } from '@/lib/session';
 
@@ -20,16 +21,12 @@ export default function MyProfilePage() {
 
   return (
     <>
-      <div className="page-h">
-        <div>
-          <p className="eyebrow">{me.employee?.employeeCode}</p>
-          <h1>My profile</h1>
-          <p>
-            Keep your details current. HR uses them for payroll, statutory filings and emergencies.
-          </p>
-        </div>
-      </div>
-      {error && <div className="banner">{error}</div>}
+      <PageHeader
+        eyebrow={me.employee?.employeeCode}
+        title="My profile"
+        description="Keep your details current. HR uses them for payroll, statutory filings and emergencies."
+      />
+      {error && <Banner>{error}</Banner>}
       {profile && <ProfileForm employeeId="me" profile={profile} editable onSaved={setProfile} />}
     </>
   );

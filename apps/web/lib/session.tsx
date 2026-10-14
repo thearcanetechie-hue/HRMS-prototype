@@ -61,7 +61,7 @@ export function RequireSession({ children }: { children: ReactNode }) {
 
   if (!value) {
     return (
-      <div className="empty" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+      <div className="grid min-h-screen place-items-center text-muted-foreground">
         Loading your workspace…
       </div>
     );

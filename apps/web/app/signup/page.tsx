@@ -4,7 +4,9 @@ import { signupSchema } from '@hrms/shared';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
-import { AuthLayout, Field } from '@/components/auth-layout';
+import { AuthLayout } from '@/components/auth-layout';
+import { Button } from '@/components/ui/button';
+import { Field, FormError, Input } from '@/components/ui/input';
 import { api, ApiError, setAccessToken } from '@/lib/api';
 import { FieldErrors, firstErrors, validate } from '@/lib/forms';
 
@@ -55,10 +57,9 @@ export default function SignupPage() {
       title="Create your workspace"
       subtitle="Set up your company in a minute. You'll be its owner."
     >
-      <form onSubmit={onSubmit} noValidate>
+      <form onSubmit={onSubmit} noValidate className="grid gap-4">
         <Field id="companyName" label="Company name" error={errors.companyName}>
-          <input
-            className="input"
+          <Input
             id="companyName"
             name="companyName"
             autoComplete="organization"
@@ -67,8 +68,7 @@ export default function SignupPage() {
           />
         </Field>
         <Field id="workspace" label="Workspace address" error={errors.workspace}>
-          <input
-            className="input"
+          <Input
             id="workspace"
             name="workspace"
             value={workspace}
@@ -80,21 +80,13 @@ export default function SignupPage() {
           />
         </Field>
         <Field id="fullName" label="Your name" error={errors.fullName}>
-          <input className="input" id="fullName" name="fullName" autoComplete="name" required />
+          <Input id="fullName" name="fullName" autoComplete="name" required />
         </Field>
         <Field id="email" label="Work email" error={errors.email}>
-          <input
-            className="input"
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-          />
+          <Input id="email" name="email" type="email" autoComplete="email" required />
         </Field>
         <Field id="password" label="Password" error={errors.password}>
-          <input
-            className="input"
+          <Input
             id="password"
             name="password"
             type="password"
@@ -102,14 +94,12 @@ export default function SignupPage() {
             required
           />
         </Field>
-        <div className="err" role="alert">
-          {formError}
-        </div>
-        <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={busy}>
+        <FormError>{formError}</FormError>
+        <Button variant="primary" size="lg" className="w-full" type="submit" disabled={busy}>
           {busy ? 'Creating…' : 'Create workspace'}
-        </button>
+        </Button>
       </form>
-      <p style={{ textAlign: 'center', margin: '16px 0 0' }} className="muted">
+      <p className="mt-5 text-center text-muted-foreground">
         Already have a workspace? <Link href="/login">Sign in</Link>
       </p>
     </AuthLayout>

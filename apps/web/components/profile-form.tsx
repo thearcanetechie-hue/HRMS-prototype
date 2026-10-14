@@ -2,7 +2,10 @@
 
 import { BLOOD_GROUPS, GENDERS, MARITAL_STATUSES, profileSchema } from '@hrms/shared';
 import { FormEvent, ReactNode, useState } from 'react';
-import { Field } from '@/components/auth-layout';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FormError, Input, Select } from '@/components/ui/input';
 import { api, ApiError, Address, IdentifierKey, Profile } from '@/lib/api';
 import { titleCase } from '@/lib/format';
 import { FieldErrors, firstErrors, validate } from '@/lib/forms';
@@ -23,17 +26,13 @@ const ADDRESS_FIELDS: [keyof Address, string][] = [
 
 function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
-    <div className="card">
-      <div className="card-h">
-        <h3>{title}</h3>
-        {note && (
-          <span className="muted" style={{ fontSize: 12 }}>
-            {note}
-          </span>
-        )}
-      </div>
-      <div className="form-grid">{children}</div>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {note && <span className="text-xs text-muted-foreground">{note}</span>}
+      </CardHeader>
+      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
+    </Card>
   );
 }
 
@@ -116,8 +115,7 @@ export function ProfileForm({
     defaultValue?: string | null,
     props: Record<string, unknown> = {},
   ) => (
-    <input
-      className="input"
+    <Input
       id={name}
       name={name}
       defaultValue={defaultValue ?? ''}
@@ -126,14 +124,14 @@ export function ProfileForm({
     />
   );
   const select = (name: string, options: readonly string[], value: string | null) => (
-    <select className="input" id={name} name={name} defaultValue={value ?? ''} disabled={!editable}>
+    <Select id={name} name={name} defaultValue={value ?? ''} disabled={!editable}>
       <option value="">Not set</option>
       {options.map((o) => (
         <option key={o} value={o}>
           {o.length <= 3 ? o : titleCase(o)}
         </option>
       ))}
-    </select>
+    </Select>
   );
   const identifier = (key: IdentifierKey, label: string) => {
     const id = profile.identifiers[key];
@@ -149,11 +147,15 @@ export function ProfileForm({
   };
   const addressBlock = (prefix: string, value: Address | null, error?: string) =>
     ADDRESS_FIELDS.map(([k, label]) => (
-      <div key={k} className={k.startsWith('line') ? 'full' : undefined}>
-        <Field id={`${prefix}.${k}`} label={label} error={k === 'line1' ? error : undefined}>
-          {input(`${prefix}.${k}`, value?.[k])}
-        </Field>
-      </div>
+      <Field
+        key={k}
+        id={`${prefix}.${k}`}
+        label={label}
+        error={k === 'line1' ? error : undefined}
+        className={k.startsWith('line') ? 'sm:col-span-2' : undefined}
+      >
+        {input(`${prefix}.${k}`, value?.[k])}
+      </Field>
     ));
 
   return (
@@ -162,8 +164,7 @@ export function ProfileForm({
       key={profile.updatedAt ?? 'new'}
       onSubmit={onSubmit}
       noValidate
-      className="grid"
-      style={{ gap: 18 }}
+      className="grid gap-6"
     >
       <Section title="Personal">
         <Field id="dateOfBirth" label="Date of birth" error={errors.dateOfBirth}>
@@ -191,12 +192,10 @@ export function ProfileForm({
       </Section>
 
       <Section title="Permanent address">
-        <label
-          className="full"
-          style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}
-        >
+        <label className="flex items-center gap-2.5 font-semibold sm:col-span-2">
           <input
             type="checkbox"
+            className="size-4 accent-primary"
             checked={sameAddress}
             onChange={(e) => setSameAddress(e.target.checked)}
             disabled={!editable}
@@ -214,11 +213,9 @@ export function ProfileForm({
         <Field id="ec.relation" label="Relation">
           {input('ec.relation', contact?.relation)}
         </Field>
-        <div className="full">
-          <Field id="ec.phone" label="Phone">
-            {input('ec.phone', contact?.phone, { type: 'tel' })}
-          </Field>
-        </div>
+        <Field id="ec.phone" label="Phone" className="sm:col-span-2">
+          {input('ec.phone', contact?.phone, { type: 'tel' })}
+        </Field>
       </Section>
 
       <Section title="Statutory IDs" note="Encrypted. Visible only to you and HR.">
@@ -239,15 +236,18 @@ export function ProfileForm({
       </Section>
 
       {editable && (
-        <div className="actions" style={{ alignItems: 'center' }}>
-          <button className="btn btn-primary" type="submit" disabled={busy}>
+        <div className="flex items-center gap-4">
+          <Button variant="primary" size="lg" type="submit" disabled={busy}>
             {busy ? 'Saving…' : 'Save profile'}
-          </button>
-          {message && (
-            <span role="status" className={message.ok ? 'pill good' : 'err'}>
-              {message.text}
-            </span>
-          )}
+          </Button>
+          {message &&
+            (message.ok ? (
+              <Badge role="status" tone="success">
+                {message.text}
+              </Badge>
+            ) : (
+              <FormError>{message.text}</FormError>
+            ))}
         </div>
       )}
     </form>
