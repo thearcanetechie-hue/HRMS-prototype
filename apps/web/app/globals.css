@@ -8,7 +8,8 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-:root {
+:root,
+.light {
   /* Light: Soft Pearl with Crimson Depth, Warm Sand for small details. */
   --background: #f2f1ed;
   --surface: #fbfaf7;
