@@ -1,10 +1,13 @@
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
-/** A data table inside a raised card; scrolls sideways on small screens. */
-export function Table({ className, ...props }: ComponentProps<'table'>) {
+/**
+ * A data table inside a raised card; scrolls sideways on small screens.
+ * `bare` drops the card, for a table that already sits inside one.
+ */
+export function Table({ className, bare, ...props }: ComponentProps<'table'> & { bare?: boolean }) {
   return (
-    <div className="overflow-x-auto rounded-2xl bg-surface shadow-raised">
+    <div className={cn('overflow-x-auto', bare ? '-mx-2' : 'rounded-2xl bg-surface shadow-raised')}>
       <table className={cn('w-full border-collapse text-sm', className)} {...props} />
     </div>
   );

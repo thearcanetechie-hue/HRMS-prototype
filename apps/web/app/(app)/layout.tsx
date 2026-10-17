@@ -1,13 +1,26 @@
 'use client';
 
+import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
+  BarChart3,
+  Bell,
   BookUser,
+  Clock,
   FileText,
+  Folder,
+  GraduationCap,
+  Heart,
+  Inbox,
   LayoutDashboard,
   LogOut,
-  Menu,
+  Menu as MenuIcon,
   Network,
+  Plug,
+  Receipt,
+  Settings,
+  Target,
   Users,
+  Wallet,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -17,58 +30,138 @@ import { ReactNode, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { ThemeToggle } from '@/components/theme';
 import { Avatar } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
+import { SearchField } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { RequireSession, useSession } from '@/lib/session';
 import { cn } from '@/lib/utils';
 
+type Can = (p: string) => boolean;
 type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  show: (can: (p: string) => boolean, hasEmployee: boolean) => boolean;
+  count?: number;
+  show: (can: Can, hasEmployee: boolean) => boolean;
 };
 
-const NAV: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: () => true },
-  { href: '/profile', label: 'My profile', icon: FileText, show: (_, hasEmployee) => hasEmployee },
+const always = () => true;
+const isHr: NavItem['show'] = (can) => can('employee.read');
+
+const NAV: { group: string; items: NavItem[] }[] = [
   {
-    href: '/team',
-    label: 'My team',
-    icon: Network,
-    show: (can) => can('team.read') && !can('employee.read'),
+    group: 'Workspace',
+    items: [
+      { href: '/dashboard', label: 'Home', icon: LayoutDashboard, show: always },
+      { href: '/attendance', label: 'Attendance & leave', icon: Clock, show: always },
+      { href: '/employees', label: 'Employees', icon: Users, show: isHr },
+      {
+        href: '/employees',
+        label: 'Directory',
+        icon: BookUser,
+        show: (can) => !can('employee.read') && can('directory.read'),
+      },
+      {
+        href: '/team',
+        label: 'My team',
+        icon: Network,
+        show: (can) => can('team.read') && !can('employee.read'),
+      },
+      { href: '/profile', label: 'My profile', icon: FileText, show: (_, e) => e },
+    ],
   },
-  { href: '/employees', label: 'Employees', icon: Users, show: (can) => can('employee.read') },
   {
-    href: '/employees',
-    label: 'Directory',
-    icon: BookUser,
-    show: (can) => !can('employee.read') && can('directory.read'),
+    group: 'Money',
+    items: [
+      { href: '/payroll', label: 'Payroll & compliance', icon: Wallet, show: isHr },
+      { href: '/claims', label: 'Overtime & claims', icon: Receipt, show: always },
+    ],
+  },
+  {
+    group: 'Growth',
+    items: [
+      { href: '/performance', label: 'Performance', icon: Target, show: always },
+      { href: '/learning', label: 'Learning', icon: GraduationCap, show: always },
+      { href: '/documents', label: 'Documents', icon: Folder, show: always },
+    ],
+  },
+  {
+    group: 'People & comms',
+    items: [
+      { href: '/engagement', label: 'Engagement', icon: Heart, show: always },
+      { href: '/inbox', label: 'Inbox', icon: Inbox, count: 4, show: always },
+    ],
+  },
+  {
+    group: 'Insights',
+    items: [
+      { href: '/analytics', label: 'Analytics', icon: BarChart3, show: isHr },
+      { href: '/integrations', label: 'Integrations', icon: Plug, show: isHr },
+    ],
   },
 ];
 
-function Shell({ children }: { children: ReactNode }) {
-  const { me, can, signOut } = useSession();
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const initials = me.user.fullName
+const toInitials = (name: string) =>
+  name
     .split(/\s+/)
     .map((p) => p[0])
     .join('')
     .slice(0, 2)
     .toUpperCase();
 
+function UserCard() {
+  const { me, can, signOut } = useSession();
+  return (
+    <div className="mt-auto flex items-center gap-3 rounded-2xl bg-surface p-3.5 shadow-raised-sm">
+      <Avatar initials={toInitials(me.user.fullName)} size="sm" />
+      <div className="min-w-0 grow">
+        <div className="truncate font-bold">{me.user.fullName}</div>
+        <div className="truncate text-xs text-muted-foreground">
+          {can('employee.read') ? 'HR · Admin' : can('team.read') ? 'Manager' : 'Employee'}
+        </div>
+      </div>
+      <Menu.Root>
+        <Menu.Trigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Account and settings">
+            <Settings />
+          </Button>
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content
+            side="top"
+            align="end"
+            sideOffset={8}
+            className="z-50 grid w-60 gap-1 rounded-2xl bg-surface p-2 shadow-raised"
+          >
+            <div className="flex items-center justify-between gap-3 px-2 py-1.5">
+              <span className="text-[13px] font-semibold text-muted-foreground">Theme</span>
+              <ThemeToggle />
+            </div>
+            <Menu.Item
+              onSelect={signOut}
+              className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 font-semibold text-danger outline-none data-[highlighted]:bg-surface-2 [&_svg]:size-4"
+            >
+              <LogOut /> Sign out
+            </Menu.Item>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu.Root>
+    </div>
+  );
+}
+
+function Shell({ children }: { children: ReactNode }) {
+  const { me, can } = useSession();
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[264px_1fr]">
       {open && (
-        <div
-          className="fixed inset-0 z-30 bg-slate-900/20 lg:hidden"
-          onClick={() => setOpen(false)}
-        />
+        <div className="fixed inset-0 z-30 bg-black/25 lg:hidden" onClick={() => setOpen(false)} />
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col gap-6 bg-background p-5 transition-transform dark:bg-surface/70 dark:backdrop-blur lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col gap-5 overflow-y-auto bg-background px-[18px] py-6 transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
           open ? 'translate-x-0 shadow-raised' : '-translate-x-full',
         )}
       >
@@ -90,62 +183,77 @@ function Shell({ children }: { children: ReactNode }) {
             <X />
           </Button>
         </div>
-        <nav aria-label="Main" className="grid gap-2">
-          <div className="px-3 pb-1 text-[11px] font-bold tracking-[0.14em] text-muted-foreground">
-            {can('employee.read') ? 'MANAGE' : 'MY WORK'}
-          </div>
-          {NAV.filter((n) => n.show(can, Boolean(me.employee))).map((n) => {
-            const active = pathname.startsWith(n.href);
+        <nav aria-label="Main" className="grid gap-4">
+          {NAV.map(({ group, items }) => {
+            const visible = items.filter((n) => n.show(can, Boolean(me.employee)));
+            if (!visible.length) return null;
             return (
-              <Link
-                key={n.label}
-                href={n.href}
-                aria-current={active ? 'page' : undefined}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold no-underline transition-all',
-                  active
-                    ? 'bg-surface text-primary-strong shadow-raised-sm dark:text-primary'
-                    : 'text-muted-foreground hover:text-foreground hover:shadow-raised-sm',
-                )}
-              >
-                <n.icon className="size-[18px]" />
-                {n.label}
-              </Link>
+              <div key={group} className="grid gap-1">
+                <div className="px-3 pb-1 text-xs font-bold tracking-[0.1em] text-muted-foreground uppercase">
+                  {group}
+                </div>
+                {visible.map((n) => {
+                  const active = pathname === n.href || pathname.startsWith(n.href + '/');
+                  return (
+                    <Link
+                      key={n.label}
+                      href={n.href}
+                      aria-current={active ? 'page' : undefined}
+                      onClick={() => setOpen(false)}
+                      className={cn(
+                        'flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold no-underline transition-all',
+                        active
+                          ? 'bg-surface text-primary shadow-raised-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      <n.icon className="size-[18px]" />
+                      <span className="grow">{n.label}</span>
+                      {n.count != null && (
+                        <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground tabular">
+                          {n.count}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
-        <div className="mt-auto rounded-2xl p-4 shadow-raised">
+        <UserCard />
+      </aside>
+      <main className="min-w-0 px-4 pt-4 pb-14 sm:pt-7 sm:pr-10 sm:pl-4 lg:pl-4">
+        <div className="mx-auto grid max-w-[1120px] gap-6">
           <div className="flex items-center gap-3">
-            <Avatar initials={initials} size="sm" />
-            <div className="min-w-0">
-              <div className="truncate font-bold">{me.user.fullName}</div>
-              <div className="truncate text-xs text-muted-foreground">{me.user.email}</div>
+            <Button
+              size="icon"
+              className="lg:hidden"
+              aria-label="Open menu"
+              onClick={() => setOpen(true)}
+            >
+              <MenuIcon />
+            </Button>
+            <SearchField
+              className="max-w-[420px]"
+              placeholder="Search people, documents, requests"
+              aria-label="Search"
+              hint="Ctrl K"
+            />
+            <div className="ml-auto flex items-center gap-3">
+              <Link
+                href="/inbox"
+                aria-label="Notifications"
+                className="relative grid size-11 place-items-center rounded-xl bg-surface text-foreground shadow-raised-sm"
+              >
+                <Bell className="size-[18px]" />
+                <span className="absolute top-2.5 right-2.5 size-2 rounded-full bg-primary" />
+              </Link>
+              <Avatar initials={toInitials(me.user.fullName)} className="hidden sm:grid" />
             </div>
           </div>
-          <Button size="sm" className="mt-4 w-full" onClick={signOut}>
-            <LogOut /> Sign out
-          </Button>
+          <div>{children}</div>
         </div>
-      </aside>
-      <main className="min-w-0 px-4 pt-4 pb-12 sm:px-8 lg:pt-6">
-        <div className="mb-6 flex items-center gap-3">
-          <Button
-            size="icon"
-            className="lg:hidden"
-            aria-label="Open menu"
-            onClick={() => setOpen(true)}
-          >
-            <Menu />
-          </Button>
-          <div className="ml-auto flex items-center gap-3">
-            <Badge tone="accent" className="hidden sm:inline-flex">
-              {me.tenant.slug}
-            </Badge>
-            <ThemeToggle />
-          </div>
-        </div>
-        <div className="mx-auto max-w-6xl">{children}</div>
       </main>
     </div>
   );

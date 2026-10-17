@@ -5,10 +5,16 @@ export function ProgressRing({
   value,
   label,
   size = 132,
+  display,
+  caption,
 }: {
   value: number;
   label: string;
   size?: number;
+  /** Centre text; defaults to the percentage. */
+  display?: string;
+  /** Small line under the centre text; defaults to `label`. */
+  caption?: string;
 }) {
   const id = 'ring' + useId().replace(/[^a-zA-Z0-9]/g, '');
   const pct = Math.max(0, Math.min(100, Math.round(value)));
@@ -42,8 +48,8 @@ export function ProgressRing({
         />
       </svg>
       <div className="relative text-center">
-        <div className="text-2xl font-extrabold tabular">{pct}%</div>
-        <div className="text-[11px] font-semibold text-muted-foreground">{label}</div>
+        <div className="text-2xl font-extrabold tabular">{display ?? `${pct}%`}</div>
+        <div className="text-[11px] font-semibold text-muted-foreground">{caption ?? label}</div>
       </div>
     </div>
   );

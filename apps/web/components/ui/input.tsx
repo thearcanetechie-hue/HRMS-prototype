@@ -11,6 +11,41 @@ export function Input({ className, ...props }: ComponentProps<'input'>) {
   return <input className={cn(field, className)} {...props} />;
 }
 
+/** Input with a small icon on the left, or a fixed prefix such as `+91`. */
+export function IconInput({
+  icon,
+  className,
+  ...props
+}: ComponentProps<'input'> & { icon: ReactNode }) {
+  return (
+    <div className="relative">
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-semibold text-muted-foreground [&_svg]:size-4"
+      >
+        {icon}
+      </span>
+      <input className={cn(field, 'pl-10', className)} {...props} />
+    </div>
+  );
+}
+
+/** Checkbox tinted with the accent colour, with its label beside it. */
+export function Checkbox({
+  label,
+  className,
+  ...props
+}: ComponentProps<'input'> & { label: ReactNode }) {
+  return (
+    <label
+      className={cn('inline-flex cursor-pointer items-center gap-2.5 text-[13.5px]', className)}
+    >
+      <input type="checkbox" className="size-4 shrink-0 cursor-pointer accent-primary" {...props} />
+      <span>{label}</span>
+    </label>
+  );
+}
+
 /** Native select (keeps mobile pickers and keyboard behaviour) styled like Input. */
 export function Select({ className, children, ...props }: ComponentProps<'select'>) {
   return (
