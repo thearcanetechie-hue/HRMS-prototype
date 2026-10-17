@@ -45,7 +45,7 @@ export default function SignupAboutPage() {
     jobTitle: '',
     email: '',
     mobile: '',
-    role: ROLES[0],
+    role: 'HR / People team',
   });
   const [password, setPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
@@ -154,7 +154,7 @@ export default function SignupAboutPage() {
                   />
                 ))}
               </div>
-              <span className={cn('text-xs font-bold', STRENGTH[s][1])}>{STRENGTH[s][0]}</span>
+              <span className={cn('text-xs font-bold', STRENGTH[s]?.[1])}>{STRENGTH[s]?.[0]}</span>
             </div>
           </Field>
         </div>

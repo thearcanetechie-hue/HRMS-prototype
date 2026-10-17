@@ -160,7 +160,7 @@ function UploadPath({ onDone }: { onDone: () => void }) {
     if (f.size > 20 * 1024 * 1024) return setError('That file is over 20 MB.');
     const rows = parseCsv(await f.text());
     if (rows.length < 2) return setError('That file has no rows under the header.');
-    const [header, ...data] = rows;
+    const [header = [], ...data] = rows;
     setFile({ name: f.name, header, data });
     setColumns(guessColumns(header, data[0]));
   }
@@ -180,7 +180,7 @@ function UploadPath({ onDone }: { onDone: () => void }) {
     try {
       const { failed } = await importRows(built.rows, { invite, onProgress: setProgress });
       if (failed.length) {
-        setError(`${failed.length} rows could not be added: ${failed[0].reason}`);
+        setError(`${failed.length} rows could not be added: ${failed[0]?.reason}`);
         setProgress(null);
       } else onDone();
     } catch (err) {
@@ -334,7 +334,7 @@ function ManualPath({ onDone }: { onDone: () => void }) {
       failed: [{ reason: e instanceof Error ? e.message : 'Failed' }],
     }));
     if (failed.length) {
-      setError(`${failed.length} could not be added: ${failed[0].reason}`);
+      setError(`${failed.length} could not be added: ${failed[0]?.reason}`);
       setBusy(false);
     } else onDone();
   }

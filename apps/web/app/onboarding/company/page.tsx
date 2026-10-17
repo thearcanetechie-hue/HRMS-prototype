@@ -86,7 +86,7 @@ export default function OnboardingCompanyPage() {
     city: '',
     state: 'Karnataka',
     pan: '',
-    payrollStart: months[0],
+    payrollStart: months[0] ?? '',
     modules: ['Attendance & leave', 'Payroll', 'Documents', 'Engagement'],
   });
   const [slugEdited, setSlugEdited] = useState(false);

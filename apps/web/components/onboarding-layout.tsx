@@ -37,7 +37,7 @@ export function OnboardingLayout({
         <div className="ml-auto flex items-center gap-4 text-[13.5px]">
           <span className="font-semibold text-muted-foreground">Step {step} of 3</span>
           <ProgressBar
-            value={[33, 67, 100][step - 1]}
+            value={[33, 67, 100][step - 1] ?? 0}
             className="hidden w-40 sm:block"
             label="Sign-up progress"
           />
