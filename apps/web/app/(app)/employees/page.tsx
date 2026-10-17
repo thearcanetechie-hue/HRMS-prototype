@@ -2,12 +2,17 @@
 
 import { createEmployeeSchema, EMPLOYMENT_TYPES } from '@hrms/shared';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Field } from '@/components/auth-layout';
-import Link from 'next/link';
-import { Icon } from '@/components/icon';
+import { Plus, Search } from 'lucide-react';
 import { InviteButton } from '@/components/invite-button';
+import { PersonCell } from '@/components/person-cell';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
+import { Field, FormError, Input, Select } from '@/components/ui/input';
+import { Banner, PageHeader } from '@/components/ui/page';
+import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { api, ApiError, Employee, Named, Paged } from '@/lib/api';
-import { formatDate, initials, STATUS_PILL, titleCase as label } from '@/lib/format';
+import { formatDate, STATUS_TONE, titleCase as label } from '@/lib/format';
 import { FieldErrors, firstErrors, validate } from '@/lib/forms';
 import { useSession } from '@/lib/session';
 
@@ -38,109 +43,85 @@ export default function EmployeesPage() {
 
   return (
     <>
-      <div className="page-h">
-        <div>
-          <h1>{full ? 'Employees' : 'Directory'}</h1>
-          <p>{data ? `${data.total} ${data.total === 1 ? 'person' : 'people'}` : 'Loading…'}</p>
-        </div>
-        <div className="actions">
-          <div className="search" style={{ display: 'block', minWidth: 240 }}>
-            <Icon name="search" size={16} />
-            <input
-              className="input"
-              placeholder="Search name, email or code"
-              aria-label="Search employees"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          {can('employee.manage') && (
-            <button className="btn btn-primary" onClick={() => setAdding(true)}>
-              <Icon name="plus" size={16} /> Add employee
-            </button>
-          )}
-        </div>
-      </div>
-      {error && (
-        <div className="banner" style={{ marginBottom: 14 }}>
-          {error}
-        </div>
-      )}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Code</th>
-                <th>Department</th>
-                <th>Designation</th>
-                <th>Location</th>
-                {full && <th>Joined</th>}
-                {full && <th>Status</th>}
-                {manage && <th>Access</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {data?.items.map((e) => (
-                <tr key={e.id}>
-                  <td>
-                    <Link
-                      href={`/employees/${e.id}`}
-                      className="who"
-                      style={{ color: 'inherit', textDecoration: 'none' }}
-                    >
-                      <div className="avatar sm alt">{initials(e.firstName, e.lastName)}</div>
-                      <div>
-                        <div className="n">
-                          {e.firstName} {e.lastName}
-                        </div>
-                        <div className="e">{e.workEmail}</div>
-                      </div>
-                    </Link>
-                  </td>
-                  <td className="num">{e.employeeCode}</td>
-                  <td>{e.department?.name ?? '–'}</td>
-                  <td>{e.designation?.name ?? '–'}</td>
-                  <td>{e.location?.name ?? '–'}</td>
-                  {full && (
-                    <td className="num">{e.dateOfJoining ? formatDate(e.dateOfJoining) : '–'}</td>
-                  )}
-                  {full && (
-                    <td>
-                      {e.status && (
-                        <span className={`pill ${STATUS_PILL[e.status]}`}>{label(e.status)}</span>
-                      )}
-                    </td>
-                  )}
-                  {manage && (
-                    <td>
-                      <InviteButton employee={e} onInvited={() => void load()} />
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {data && data.items.length === 0 && (
-            <div className="empty">No one matches that search.</div>
-          )}
-        </div>
-      </div>
-      {adding && (
-        <AddEmployee
-          onClose={() => setAdding(false)}
-          onCreated={() => {
-            setAdding(false);
-            void load();
-          }}
-        />
-      )}
+      <PageHeader
+        title={full ? 'Employees' : 'Directory'}
+        description={data ? `${data.total} ${data.total === 1 ? 'person' : 'people'}` : 'Loading…'}
+        actions={
+          <>
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-10"
+                placeholder="Search name, email or code"
+                aria-label="Search employees"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {manage && (
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                <Plus /> Add employee
+              </Button>
+            )}
+          </>
+        }
+      />
+      {error && <Banner>{error}</Banner>}
+      <Table>
+        <THead>
+          <tr>
+            <TH>Employee</TH>
+            <TH>Code</TH>
+            <TH>Department</TH>
+            <TH>Designation</TH>
+            <TH>Location</TH>
+            {full && <TH>Joined</TH>}
+            {full && <TH>Status</TH>}
+            {manage && <TH>Access</TH>}
+          </tr>
+        </THead>
+        <TBody>
+          {data?.items.map((e) => (
+            <TR key={e.id}>
+              <TD>
+                <PersonCell employee={e} />
+              </TD>
+              <TD className="font-mono text-[13px]">{e.employeeCode}</TD>
+              <TD>{e.department?.name ?? '–'}</TD>
+              <TD>{e.designation?.name ?? '–'}</TD>
+              <TD>{e.location?.name ?? '–'}</TD>
+              {full && (
+                <TD className="whitespace-nowrap tabular">
+                  {e.dateOfJoining ? formatDate(e.dateOfJoining) : '–'}
+                </TD>
+              )}
+              {full && (
+                <TD>{e.status && <Badge tone={STATUS_TONE[e.status]}>{label(e.status)}</Badge>}</TD>
+              )}
+              {manage && (
+                <TD>
+                  <InviteButton employee={e} onInvited={() => void load()} />
+                </TD>
+              )}
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+      {data && data.items.length === 0 && <TableEmpty>No one matches that search.</TableEmpty>}
+      <Dialog open={adding} onOpenChange={setAdding}>
+        {adding && (
+          <AddEmployee
+            onCreated={() => {
+              setAdding(false);
+              void load();
+            }}
+          />
+        )}
+      </Dialog>
     </>
   );
 }
-
-function AddEmployee({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function AddEmployee({ onCreated }: { onCreated: () => void }) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -164,10 +145,7 @@ function AddEmployee({ onClose, onCreated }: { onClose: () => void; onCreated: (
         setOptions({ departments, designations, locations }),
       )
       .catch(() => undefined);
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -191,84 +169,67 @@ function AddEmployee({ onClose, onCreated }: { onClose: () => void; onCreated: (
   }
 
   const select = (name: string, items: Named[]) => (
-    <select className="input" id={name} name={name} defaultValue="">
+    <Select id={name} name={name} defaultValue="">
       <option value="">Not set</option>
       {items.map((i) => (
         <option key={i.id} value={i.id}>
           {i.name}
         </option>
       ))}
-    </select>
+    </Select>
   );
 
   return (
-    <div className="scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="add-title">
-        <div className="card-h">
-          <h3 id="add-title">Add employee</h3>
-          <button className="btn icon-btn" aria-label="Close" onClick={onClose}>
-            <Icon name="x" />
-          </button>
+    <DialogContent title="Add employee" side="right" aria-describedby={undefined}>
+      <form onSubmit={onSubmit} noValidate className="grid gap-4 sm:grid-cols-2">
+        <Field id="firstName" label="First name" error={errors.firstName}>
+          <Input id="firstName" name="firstName" required />
+        </Field>
+        <Field id="lastName" label="Last name" error={errors.lastName}>
+          <Input id="lastName" name="lastName" />
+        </Field>
+        <Field className="sm:col-span-2" id="workEmail" label="Work email" error={errors.workEmail}>
+          <Input id="workEmail" name="workEmail" type="email" required />
+        </Field>
+        <Field id="employeeCode" label="Employee code" error={errors.employeeCode}>
+          <Input id="employeeCode" name="employeeCode" required />
+        </Field>
+        <Field id="dateOfJoining" label="Date of joining" error={errors.dateOfJoining}>
+          <Input id="dateOfJoining" name="dateOfJoining" type="date" required />
+        </Field>
+        <Field id="phone" label="Phone" error={errors.phone}>
+          <Input id="phone" name="phone" type="tel" />
+        </Field>
+        <Field id="employmentType" label="Employment type" error={errors.employmentType}>
+          <Select id="employmentType" name="employmentType" defaultValue="FULL_TIME">
+            {EMPLOYMENT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {label(t)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field id="departmentId" label="Department" error={errors.departmentId}>
+          {select('departmentId', options.departments)}
+        </Field>
+        <Field id="designationId" label="Designation" error={errors.designationId}>
+          {select('designationId', options.designations)}
+        </Field>
+        <Field className="sm:col-span-2" id="locationId" label="Location" error={errors.locationId}>
+          {select('locationId', options.locations)}
+        </Field>
+        <div className="sm:col-span-2">
+          <FormError>{formError}</FormError>
         </div>
-        <form onSubmit={onSubmit} noValidate className="form-grid">
-          <Field id="firstName" label="First name" error={errors.firstName}>
-            <input className="input" id="firstName" name="firstName" required />
-          </Field>
-          <Field id="lastName" label="Last name" error={errors.lastName}>
-            <input className="input" id="lastName" name="lastName" />
-          </Field>
-          <div className="full">
-            <Field id="workEmail" label="Work email" error={errors.workEmail}>
-              <input className="input" id="workEmail" name="workEmail" type="email" required />
-            </Field>
-          </div>
-          <Field id="employeeCode" label="Employee code" error={errors.employeeCode}>
-            <input className="input" id="employeeCode" name="employeeCode" required />
-          </Field>
-          <Field id="dateOfJoining" label="Date of joining" error={errors.dateOfJoining}>
-            <input className="input" id="dateOfJoining" name="dateOfJoining" type="date" required />
-          </Field>
-          <Field id="phone" label="Phone" error={errors.phone}>
-            <input className="input" id="phone" name="phone" type="tel" />
-          </Field>
-          <Field id="employmentType" label="Employment type" error={errors.employmentType}>
-            <select
-              className="input"
-              id="employmentType"
-              name="employmentType"
-              defaultValue="FULL_TIME"
-            >
-              {EMPLOYMENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {label(t)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field id="departmentId" label="Department" error={errors.departmentId}>
-            {select('departmentId', options.departments)}
-          </Field>
-          <Field id="designationId" label="Designation" error={errors.designationId}>
-            {select('designationId', options.designations)}
-          </Field>
-          <div className="full">
-            <Field id="locationId" label="Location" error={errors.locationId}>
-              {select('locationId', options.locations)}
-            </Field>
-          </div>
-          <div className="err full" role="alert">
-            {formError}
-          </div>
-          <div className="actions full">
-            <button className="btn btn-primary" type="submit" disabled={busy}>
-              {busy ? 'Saving…' : 'Add employee'}
-            </button>
-            <button className="btn" type="button" onClick={onClose}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      </aside>
-    </div>
+        <div className="flex gap-3 sm:col-span-2">
+          <Button variant="primary" type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Add employee'}
+          </Button>
+          <DialogClose asChild>
+            <Button type="button">Cancel</Button>
+          </DialogClose>
+        </div>
+      </form>
+    </DialogContent>
   );
 }

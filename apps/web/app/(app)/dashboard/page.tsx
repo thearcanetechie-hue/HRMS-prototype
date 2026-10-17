@@ -1,23 +1,47 @@
 'use client';
 
+import {
+  BarChart3,
+  Building2,
+  CalendarDays,
+  ChevronRight,
+  Clock,
+  FileText,
+  GraduationCap,
+  HeartHandshake,
+  MessagesSquare,
+  Receipt,
+  Sparkles,
+  Target,
+  UserCheck,
+  UserPlus,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Icon, IconName } from '@/components/icon';
+import { Badge } from '@/components/ui/badge';
+import { Calendar } from '@/components/ui/calendar';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { IconTile, PageHeader } from '@/components/ui/page';
+
 import { api, Named, Paged, Employee } from '@/lib/api';
 import { useSession } from '@/lib/session';
 
-const MODULES: { name: string; icon: IconName; phase: number }[] = [
-  { name: 'Onboarding & offboarding', icon: 'users', phase: 2 },
-  { name: 'Attendance & biometrics', icon: 'clock', phase: 2 },
-  { name: 'Leave', icon: 'cal', phase: 2 },
-  { name: 'Payroll & compliance', icon: 'wallet', phase: 3 },
-  { name: 'Expenses & reimbursements', icon: 'doc', phase: 3 },
-  { name: 'Documents', icon: 'doc', phase: 2 },
-  { name: 'Performance & assessments', icon: 'target', phase: 4 },
-  { name: 'Learning & development', icon: 'up', phase: 4 },
-  { name: 'Engagement & feedback', icon: 'heart', phase: 4 },
-  { name: 'Internal communication & meetings', icon: 'video', phase: 4 },
-  { name: 'Analytics & reporting', icon: 'hub', phase: 5 },
-  { name: 'AI assistant', icon: 'spark', phase: 5 },
+const MODULES: { name: string; icon: LucideIcon; phase: number }[] = [
+  { name: 'Onboarding & offboarding', icon: UserPlus, phase: 2 },
+  { name: 'Attendance & biometrics', icon: Clock, phase: 2 },
+  { name: 'Leave', icon: CalendarDays, phase: 2 },
+  { name: 'Documents', icon: FileText, phase: 2 },
+  { name: 'Payroll & compliance', icon: Wallet, phase: 3 },
+  { name: 'Expenses & reimbursements', icon: Receipt, phase: 3 },
+  { name: 'Performance & assessments', icon: Target, phase: 4 },
+  { name: 'Learning & development', icon: GraduationCap, phase: 4 },
+  { name: 'Engagement & feedback', icon: HeartHandshake, phase: 4 },
+  { name: 'Communication & meetings', icon: MessagesSquare, phase: 4 },
+  { name: 'Analytics & reporting', icon: BarChart3, phase: 5 },
+  { name: 'AI assistant', icon: Sparkles, phase: 5 },
 ];
 
 export default function DashboardPage() {
@@ -45,86 +69,96 @@ export default function DashboardPage() {
       .catch(() => setStats(null));
   }, [can]);
 
-  const kpis: [string, number | undefined, IconName][] = [
-    ['Employees', stats?.total, 'users'],
-    ['Active', stats?.active, 'check'],
-    ['Onboarding', stats?.onboarding, 'plus'],
-    ['Departments', stats?.departments, 'hub'],
+  const kpis: [string, number | undefined, LucideIcon][] = [
+    ['Employees', stats?.total, Users],
+    ['Active', stats?.active, UserCheck],
+    ['Onboarding', stats?.onboarding, UserPlus],
+    ['Departments', stats?.departments, Building2],
   ];
 
   return (
     <>
-      <div className="page-h">
-        <div>
-          <p className="eyebrow">{me.tenant.name}</p>
-          <h1>Good to see you, {me.user.fullName.split(' ')[0]}</h1>
-          <p>Here&apos;s your workspace at a glance.</p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow={me.tenant.name}
+        title={`Good to see you, ${me.user.fullName.split(' ')[0]}`}
+        description="Here's your workspace at a glance."
+      />
+
       {!can('employee.read') && (
-        <div className="grid g2" style={{ marginBottom: 18 }}>
-          <a
-            href="/profile"
-            className="card lift"
-            style={{ color: 'inherit', textDecoration: 'none' }}
-          >
-            <div className="card-h">
-              <h3>My profile</h3>
-              <Icon name="doc" />
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              Add your PAN, Aadhaar, bank account and emergency contact.
-            </p>
-          </a>
-          <a
-            href={can('team.read') ? '/team' : '/employees'}
-            className="card lift"
-            style={{ color: 'inherit', textDecoration: 'none' }}
-          >
-            <div className="card-h">
-              <h3>{can('team.read') ? 'My team' : 'Directory'}</h3>
-              <Icon name="users" />
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              {can('team.read') ? 'See everyone in your reporting line.' : 'Find a colleague.'}
-            </p>
-          </a>
+        <div className="mb-6 grid gap-5 sm:grid-cols-2">
+          {[
+            {
+              href: '/profile',
+              title: 'My profile',
+              icon: FileText,
+              text: 'Add your PAN, Aadhaar, bank account and emergency contact.',
+            },
+            {
+              href: can('team.read') ? '/team' : '/employees',
+              title: can('team.read') ? 'My team' : 'Directory',
+              icon: Users,
+              text: can('team.read') ? 'See everyone in your reporting line.' : 'Find a colleague.',
+            },
+          ].map((c) => (
+            <Link key={c.href} href={c.href} className="group text-inherit no-underline">
+              <Card className="flex items-center gap-4 transition-transform group-hover:-translate-y-0.5">
+                <IconTile>
+                  <c.icon />
+                </IconTile>
+                <div className="grow">
+                  <CardTitle>{c.title}</CardTitle>
+                  <CardDescription>{c.text}</CardDescription>
+                </div>
+                <ChevronRight className="size-5 text-muted-foreground" />
+              </Card>
+            </Link>
+          ))}
         </div>
       )}
+
       {can('employee.read') && (
-        <div className="grid g4" style={{ marginBottom: 18 }}>
-          {kpis.map(([label, value, icon], i) => (
-            <div key={label} className={`card kpi lift ${i === 0 ? 'hot' : ''}`}>
-              <div className="label">
-                <span className="kpi-ico">
-                  <Icon name={icon} size={16} />
-                </span>
-                {label}
-              </div>
-              <div className="value num">{value ?? '–'}</div>
-            </div>
-          ))}
+        <div className="mb-6 grid gap-5 lg:grid-cols-[1fr_320px]">
+          <div className="grid grid-cols-2 gap-5">
+            {kpis.map(([label, value, Icon]) => (
+              <Card key={label} className="flex items-center gap-4">
+                <IconTile>
+                  <Icon />
+                </IconTile>
+                <div>
+                  <div className="text-[13px] font-semibold text-muted-foreground">{label}</div>
+                  <div className="text-[28px] leading-tight font-extrabold tabular">
+                    {value ?? '–'}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+          {/* Desktop only: on phones the KPI tiles are enough above the fold. */}
+          <Card className="hidden lg:block">
+            <Calendar />
+          </Card>
         </div>
       )}
-      <div className="card">
-        <div className="card-h">
-          <h3>Modules</h3>
-          <span className="pill acc">Foundation live</span>
-        </div>
-        <div className="list">
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Modules</CardTitle>
+          <Badge tone="accent">Foundation live</Badge>
+        </CardHeader>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {MODULES.map((m) => (
-            <div key={m.name} className="row module-soon">
-              <span className="kpi-ico">
-                <Icon name={m.icon} size={16} />
+            <div key={m.name} className="flex items-center gap-3 rounded-xl bg-surface-2/60 p-3">
+              <IconTile className="size-9 bg-surface text-muted-foreground shadow-raised-sm">
+                <m.icon />
+              </IconTile>
+              <div className="grow text-[13.5px] font-semibold">{m.name}</div>
+              <span className="text-[11px] font-bold whitespace-nowrap text-muted-foreground">
+                Phase {m.phase}
               </span>
-              <div className="grow">
-                <div className="t">{m.name}</div>
-              </div>
-              <span className="pill">Phase {m.phase}</span>
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </>
   );
 }

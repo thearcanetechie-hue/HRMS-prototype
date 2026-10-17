@@ -4,7 +4,9 @@ import { loginSchema } from '@hrms/shared';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
-import { AuthLayout, Field } from '@/components/auth-layout';
+import { AuthLayout } from '@/components/auth-layout';
+import { Button } from '@/components/ui/button';
+import { Field, FormError, Input } from '@/components/ui/input';
 import { api, ApiError, setAccessToken } from '@/lib/api';
 import { FieldErrors, validate } from '@/lib/forms';
 
@@ -45,10 +47,9 @@ export default function LoginPage() {
 
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to your company workspace.">
-      <form onSubmit={onSubmit} noValidate>
+      <form onSubmit={onSubmit} noValidate className="grid gap-4">
         <Field id="workspace" label="Workspace" error={errors.workspace}>
-          <input
-            className="input"
+          <Input
             id="workspace"
             name="workspace"
             autoComplete="organization"
@@ -57,18 +58,10 @@ export default function LoginPage() {
           />
         </Field>
         <Field id="email" label="Work email" error={errors.email}>
-          <input
-            className="input"
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-          />
+          <Input id="email" name="email" type="email" autoComplete="email" required />
         </Field>
         <Field id="password" label="Password" error={errors.password}>
-          <input
-            className="input"
+          <Input
             id="password"
             name="password"
             type="password"
@@ -76,14 +69,12 @@ export default function LoginPage() {
             required
           />
         </Field>
-        <div className="err" role="alert">
-          {formError}
-        </div>
-        <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={busy}>
+        <FormError>{formError}</FormError>
+        <Button variant="primary" size="lg" className="w-full" type="submit" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
-        </button>
+        </Button>
       </form>
-      <p style={{ textAlign: 'center', margin: '16px 0 0' }} className="muted">
+      <p className="mt-5 text-center text-muted-foreground">
         New here? <Link href="/signup">Create a workspace</Link>
       </p>
     </AuthLayout>

@@ -1,9 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api, ApiError, Employee } from '@/lib/api';
-import { formatDate, initials, STATUS_PILL, titleCase } from '@/lib/format';
+import { PersonCell } from '@/components/person-cell';
+import { Badge } from '@/components/ui/badge';
+import { Banner, PageHeader } from '@/components/ui/page';
+import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { formatDate, STATUS_TONE, titleCase } from '@/lib/format';
 
 export default function TeamPage() {
   const [items, setItems] = useState<Employee[] | null>(null);
@@ -20,68 +23,50 @@ export default function TeamPage() {
   const direct = items?.filter((e) => e.direct).length ?? 0;
   return (
     <>
-      <div className="page-h">
-        <div>
-          <h1>My team</h1>
-          <p>
-            {items ? `${direct} direct, ${items.length - direct} through your reports` : 'Loading…'}
-          </p>
-        </div>
-      </div>
-      {error && <div className="banner">{error}</div>}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Designation</th>
-                <th>Reports to</th>
-                <th>Joined</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items?.map((e) => (
-                <tr key={e.id}>
-                  <td>
-                    <Link
-                      href={`/employees/${e.id}`}
-                      className="who"
-                      style={{ color: 'inherit', textDecoration: 'none' }}
-                    >
-                      <div className="avatar sm alt">{initials(e.firstName, e.lastName)}</div>
-                      <div>
-                        <div className="n">
-                          {e.firstName} {e.lastName}
-                        </div>
-                        <div className="e">{e.workEmail}</div>
-                      </div>
-                    </Link>
-                  </td>
-                  <td>{e.designation?.name ?? '–'}</td>
-                  <td>
-                    {e.direct ? (
-                      <span className="pill acc">You</span>
-                    ) : e.manager ? (
-                      `${e.manager.firstName} ${e.manager.lastName}`
-                    ) : (
-                      '–'
-                    )}
-                  </td>
-                  <td className="num">{e.dateOfJoining ? formatDate(e.dateOfJoining) : '–'}</td>
-                  <td>
-                    {e.status && (
-                      <span className={`pill ${STATUS_PILL[e.status]}`}>{titleCase(e.status)}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {items?.length === 0 && <div className="empty">Nobody reports to you yet.</div>}
-        </div>
-      </div>
+      <PageHeader
+        title="My team"
+        description={
+          items ? `${direct} direct, ${items.length - direct} through your reports` : 'Loading…'
+        }
+      />
+      {error && <Banner>{error}</Banner>}
+      <Table>
+        <THead>
+          <tr>
+            <TH>Employee</TH>
+            <TH>Designation</TH>
+            <TH>Reports to</TH>
+            <TH>Joined</TH>
+            <TH>Status</TH>
+          </tr>
+        </THead>
+        <TBody>
+          {items?.map((e) => (
+            <TR key={e.id}>
+              <TD>
+                <PersonCell employee={e} />
+              </TD>
+              <TD>{e.designation?.name ?? '–'}</TD>
+              <TD>
+                {e.direct ? (
+                  <Badge tone="accent">You</Badge>
+                ) : e.manager ? (
+                  `${e.manager.firstName} ${e.manager.lastName}`
+                ) : (
+                  '–'
+                )}
+              </TD>
+              <TD className="whitespace-nowrap tabular">
+                {e.dateOfJoining ? formatDate(e.dateOfJoining) : '–'}
+              </TD>
+              <TD>
+                {e.status && <Badge tone={STATUS_TONE[e.status]}>{titleCase(e.status)}</Badge>}
+              </TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+      {items?.length === 0 && <TableEmpty>Nobody reports to you yet.</TableEmpty>}
     </>
   );
 }

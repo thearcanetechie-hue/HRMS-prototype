@@ -3,7 +3,9 @@
 import { acceptInviteSchema } from '@hrms/shared';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useState } from 'react';
-import { AuthLayout, Field } from '@/components/auth-layout';
+import { AuthLayout } from '@/components/auth-layout';
+import { Button } from '@/components/ui/button';
+import { Field, FormError, Input } from '@/components/ui/input';
 import { api, ApiError, setAccessToken } from '@/lib/api';
 import { FieldErrors, validate } from '@/lib/forms';
 
@@ -66,9 +68,7 @@ function AcceptInvite() {
   if (linkError) {
     return (
       <AuthLayout title="Invite link problem" subtitle={linkError}>
-        <p className="muted" style={{ marginTop: 20 }}>
-          Ask your HR team to send a new invite.
-        </p>
+        <p className="text-muted-foreground">Ask your HR team to send a new invite.</p>
       </AuthLayout>
     );
   }
@@ -84,16 +84,15 @@ function AcceptInvite() {
       title={`Join ${info.companyName}`}
       subtitle={`Hi ${info.fullName.split(' ')[0]}, set a password to finish setting up your account.`}
     >
-      <form onSubmit={onSubmit} noValidate>
-        <div className="inset" style={{ padding: '10px 13px' }}>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Workspace <b className="num">{info.workspace}</b>
+      <form onSubmit={onSubmit} noValidate className="grid gap-4">
+        <div className="rounded-xl bg-surface-2 px-4 py-3">
+          <div className="text-xs text-muted-foreground">
+            Workspace <b className="font-mono">{info.workspace}</b>
           </div>
-          <div style={{ fontWeight: 700 }}>{info.email}</div>
+          <div className="font-bold">{info.email}</div>
         </div>
         <Field id="password" label="Password" error={errors.password}>
-          <input
-            className="input"
+          <Input
             id="password"
             name="password"
             type="password"
@@ -102,21 +101,12 @@ function AcceptInvite() {
           />
         </Field>
         <Field id="confirm" label="Confirm password" error={errors.confirm}>
-          <input
-            className="input"
-            id="confirm"
-            name="confirm"
-            type="password"
-            autoComplete="new-password"
-            required
-          />
+          <Input id="confirm" name="confirm" type="password" autoComplete="new-password" required />
         </Field>
-        <div className="err" role="alert">
-          {formError}
-        </div>
-        <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={busy}>
+        <FormError>{formError}</FormError>
+        <Button variant="primary" size="lg" className="w-full" type="submit" disabled={busy}>
           {busy ? 'Setting up…' : 'Set password and sign in'}
-        </button>
+        </Button>
       </form>
     </AuthLayout>
   );
