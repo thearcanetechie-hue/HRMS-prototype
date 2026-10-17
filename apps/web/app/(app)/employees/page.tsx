@@ -175,7 +175,7 @@ function Employees() {
                   </div>
                 </Link>
               </TD>
-              <TD className="font-mono text-[13px]">{e.employeeCode}</TD>
+              <TD className="font-mono text-[13px] whitespace-nowrap">{e.employeeCode}</TD>
               <TD>{e.department?.name ?? '–'}</TD>
               <TD>{e.location?.name ?? '–'}</TD>
               {full && (

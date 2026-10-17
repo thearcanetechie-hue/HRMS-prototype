@@ -1,4 +1,4 @@
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { TONE_TINT, type Tone } from './tone';
@@ -36,16 +36,27 @@ export function PageHeader({
   );
 }
 
-export function Banner({ children, className }: { children: ReactNode; className?: string }) {
+/** Message strip above the content: errors by default, `tone="success"` for confirmations. */
+export function Banner({
+  children,
+  className,
+  tone = 'danger',
+}: {
+  children: ReactNode;
+  className?: string;
+  tone?: 'danger' | 'success';
+}) {
+  const Icon = tone === 'success' ? CheckCircle2 : AlertCircle;
   return (
     <div
-      role="alert"
+      role={tone === 'danger' ? 'alert' : 'status'}
       className={cn(
-        'mb-5 flex items-center gap-3 rounded-xl bg-danger/10 px-4 py-3 font-semibold text-danger',
+        'mb-5 flex items-center gap-3 rounded-xl px-4 py-3 font-semibold',
+        tone === 'success' ? 'bg-success/12 text-success' : 'bg-danger/10 text-danger',
         className,
       )}
     >
-      <AlertCircle className="size-5 shrink-0" />
+      <Icon className="size-5 shrink-0" />
       {children}
     </div>
   );
