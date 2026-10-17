@@ -22,7 +22,7 @@ export function PageHeader({
         {leading}
         <div className="min-w-0">
           {eyebrow && (
-            <p className="mb-1 text-xs font-bold tracking-[0.12em] text-primary-strong uppercase dark:text-primary">
+            <p className="mb-1 text-xs font-bold tracking-[0.12em] text-detail uppercase">
               {eyebrow}
             </p>
           )}
@@ -40,7 +40,7 @@ export function Banner({ children, className }: { children: ReactNode; className
     <div
       role="alert"
       className={cn(
-        'mb-5 flex items-center gap-3 rounded-xl bg-surface px-4 py-3 font-semibold text-danger shadow-inset-sm',
+        'mb-5 flex items-center gap-3 rounded-xl bg-danger/10 px-4 py-3 font-semibold text-danger',
         className,
       )}
     >
@@ -59,7 +59,7 @@ export function IconTile({ children, className }: { children: ReactNode; classNa
   return (
     <span
       className={cn(
-        'grid size-10 shrink-0 place-items-center rounded-xl bg-surface text-primary-strong shadow-raised-sm dark:text-primary [&_svg]:size-[18px]',
+        'grid size-10 shrink-0 place-items-center rounded-xl bg-accent-2/14 text-accent-2 shadow-tile [&_svg]:size-[18px]',
         className,
       )}
     >

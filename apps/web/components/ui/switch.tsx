@@ -8,7 +8,7 @@ export function Switch({ className, ...props }: ComponentProps<typeof SwitchPrim
   return (
     <SwitchPrimitive.Root
       className={cn(
-        'relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full bg-surface shadow-inset-sm transition-colors data-[state=checked]:bg-primary-soft/70 disabled:opacity-50',
+        'relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full bg-surface-2 shadow-inset-sm transition-colors data-[state=checked]:bg-primary-soft/70 disabled:opacity-50',
         className,
       )}
       {...props}

@@ -85,7 +85,7 @@ function AcceptInvite() {
       subtitle={`Hi ${info.fullName.split(' ')[0]}, set a password to finish setting up your account.`}
     >
       <form onSubmit={onSubmit} noValidate className="grid gap-4">
-        <div className="rounded-xl px-4 py-3 shadow-inset-sm">
+        <div className="rounded-xl bg-surface-2 px-4 py-3">
           <div className="text-xs text-muted-foreground">
             Workspace <b className="font-mono">{info.workspace}</b>
           </div>

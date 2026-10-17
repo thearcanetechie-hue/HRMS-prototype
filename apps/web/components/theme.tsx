@@ -29,7 +29,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       aria-label="Dark mode"
       onClick={() => setTheme(dark ? 'light' : 'dark')}
       className={cn(
-        'relative flex h-10 w-[76px] shrink-0 cursor-pointer items-center justify-between rounded-full bg-surface px-2.5 text-muted-foreground shadow-inset-sm',
+        'relative flex h-10 w-[76px] shrink-0 cursor-pointer items-center justify-between rounded-full bg-surface-2 px-2.5 text-muted-foreground shadow-inset-sm',
         className,
       )}
     >

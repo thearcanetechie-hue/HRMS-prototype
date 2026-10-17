@@ -4,7 +4,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 const field =
-  'h-11 w-full min-w-0 rounded-xl bg-surface px-3.5 text-sm text-foreground shadow-inset-sm outline-none transition-shadow placeholder:text-muted-foreground/80 focus-visible:shadow-inset focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring/60 disabled:cursor-not-allowed disabled:opacity-70 aria-invalid:outline-2 aria-invalid:outline-danger/70';
+  'h-11 w-full min-w-0 rounded-xl bg-surface-2 px-3.5 text-sm text-foreground shadow-inset-sm outline-none transition-shadow placeholder:text-muted-foreground/80 focus-visible:shadow-inset focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring/60 disabled:cursor-not-allowed disabled:opacity-70 aria-invalid:outline-2 aria-invalid:outline-danger/70';
 
 /** A pressed-in text box. */
 export function Input({ className, ...props }: ComponentProps<'input'>) {

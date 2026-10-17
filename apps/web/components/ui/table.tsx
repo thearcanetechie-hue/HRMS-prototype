@@ -21,10 +21,7 @@ export function TBody(props: ComponentProps<'tbody'>) {
 export function TR({ className, ...props }: ComponentProps<'tr'>) {
   return (
     <tr
-      className={cn(
-        'border-b border-border/70 transition-colors last:border-0 hover:bg-surface-2/60',
-        className,
-      )}
+      className={cn('transition-colors even:bg-surface-2/40 hover:bg-surface-2/70', className)}
       {...props}
     />
   );
@@ -34,7 +31,7 @@ export function TH({ className, ...props }: ComponentProps<'th'>) {
   return (
     <th
       className={cn(
-        'border-b border-border px-4 py-3.5 text-left text-xs font-bold tracking-wide whitespace-nowrap text-muted-foreground uppercase',
+        'px-4 py-3.5 text-left text-xs font-bold tracking-wide whitespace-nowrap text-muted-foreground uppercase',
         className,
       )}
       {...props}

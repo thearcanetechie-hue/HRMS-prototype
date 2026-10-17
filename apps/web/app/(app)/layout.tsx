@@ -68,7 +68,7 @@ function Shell({ children }: { children: ReactNode }) {
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col gap-6 bg-background p-5 transition-transform dark:border-r dark:bg-surface/70 dark:backdrop-blur lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col gap-6 bg-background p-5 transition-transform dark:bg-surface/70 dark:backdrop-blur lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
           open ? 'translate-x-0 shadow-raised' : '-translate-x-full',
         )}
       >
@@ -105,7 +105,7 @@ function Shell({ children }: { children: ReactNode }) {
                 className={cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold no-underline transition-all',
                   active
-                    ? 'text-primary-strong shadow-inset-sm dark:text-primary'
+                    ? 'bg-surface text-primary-strong shadow-raised-sm dark:text-primary'
                     : 'text-muted-foreground hover:text-foreground hover:shadow-raised-sm',
                 )}
               >

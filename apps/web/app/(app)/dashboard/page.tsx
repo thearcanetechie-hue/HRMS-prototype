@@ -147,8 +147,8 @@ export default function DashboardPage() {
         </CardHeader>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {MODULES.map((m) => (
-            <div key={m.name} className="flex items-center gap-3 rounded-xl p-3 shadow-inset-sm">
-              <IconTile className="size-9 text-muted-foreground">
+            <div key={m.name} className="flex items-center gap-3 rounded-xl bg-surface-2/60 p-3">
+              <IconTile className="size-9 bg-surface text-muted-foreground shadow-raised-sm">
                 <m.icon />
               </IconTile>
               <div className="grow text-[13.5px] font-semibold">{m.name}</div>

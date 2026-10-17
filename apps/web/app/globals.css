@@ -2,71 +2,81 @@
 
 /*
  * HRMS design tokens. Every colour, radius and shadow comes from a CSS variable so the
- * light (soft grey, raised surfaces) and dark themes share one set of Tailwind classes.
+ * light (Pearl & Crimson) and dark (Obsidian & Antique Gold) themes share one set of Tailwind classes.
  * See docs/DESIGN.md for how to use them in new modules.
  */
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #e6ebf1;
-  --surface: #e6ebf1;
-  --surface-2: #dde3ea;
-  --foreground: #27303d;
-  --muted-foreground: #586274;
-  --border: #d3dae3;
+  /* Light: Soft Pearl with Crimson Depth, Warm Sand for small details. */
+  --background: #f2f1ed;
+  --surface: #fbfaf7;
+  --surface-2: #ebe8e1;
+  --foreground: #161616;
+  --muted-foreground: #5e5850;
+  --border: #e3dfd6;
 
-  --primary: #0b6fae;
-  --primary-strong: #095a8e;
-  --primary-soft: #4fbdf0;
+  --primary: #710014;
+  --primary-strong: #5c0010;
+  --primary-soft: #a0283a;
   --primary-foreground: #ffffff;
-  --ring: #0b6fae;
+  --ring: #710014;
+  --detail: #86664a;
+  --accent-2: #710014;
 
-  --success: #17845a;
-  --warning: #a35f00;
-  --danger: #c2353b;
+  --success: #2e7d4f;
+  --warning: #9e5c00;
+  --danger: #c2410c;
   --info: #2d6cc0;
 
-  /* Neumorphic light: a dark shadow bottom-right and a white highlight top-left. */
-  --shade: 163 177 198;
-  --light: 255 255 255;
-  --raised: 7px 7px 16px rgb(var(--shade) / 0.55), -7px -7px 16px rgb(var(--light) / 0.85);
-  --raised-sm: 4px 4px 9px rgb(var(--shade) / 0.5), -4px -4px 9px rgb(var(--light) / 0.85);
-  --inset: inset 4px 4px 9px rgb(var(--shade) / 0.5), inset -4px -4px 9px rgb(var(--light) / 0.85);
-  --inset-sm:
-    inset 2px 2px 5px rgb(var(--shade) / 0.5), inset -2px -2px 5px rgb(var(--light) / 0.85);
-  --glow: 0 6px 16px rgb(11 111 174 / 0.35);
+  /* No borders anywhere: depth comes from layered shadows tinted with the palette. */
+  --shade: 58 16 16;
+  --raised:
+    0 1px 2px rgb(var(--shade) / 0.06), 0 4px 10px -4px rgb(var(--shade) / 0.08),
+    0 24px 48px -20px rgb(var(--shade) / 0.28);
+  --raised-sm: 0 1px 2px rgb(var(--shade) / 0.06), 0 8px 18px -8px rgb(var(--shade) / 0.25);
+  --inset: inset 0 2px 6px rgb(var(--shade) / 0.1), inset 0 1px 2px rgb(var(--shade) / 0.06);
+  --inset-sm: inset 0 1px 3px rgb(var(--shade) / 0.09);
+  --glow: 0 2px 4px rgb(113 0 20 / 0.25), 0 12px 26px -8px rgb(113 0 20 / 0.5);
+  --tile-glow: 0 6px 14px -6px rgb(113 0 20 / 0.35);
 
   color-scheme: light;
 }
 
 .dark {
-  /* Dark: near-black bento cards with warm gold accents and a soft glow. */
-  --background: #0b0b0d;
-  --surface: #16161a;
-  --surface-2: #1f1f24;
-  --foreground: #ece7df;
-  --muted-foreground: #a29b90;
-  --border: #2a2a30;
+  /* Dark: Obsidian Black with Antique Gold, Warm Sand for small details. */
+  --background: #161616;
+  --surface: #1f1e1d;
+  --surface-2: #282624;
+  --foreground: #f2f1ed;
+  --muted-foreground: #a9a39a;
+  --border: #2e2c2a;
 
-  --primary: #e2a94f;
-  --primary-strong: #c4842c;
-  --primary-soft: #f6d48e;
+  --primary: #c28d39;
+  --primary-strong: #a8762a;
+  --primary-soft: #dcb06a;
   --primary-foreground: #1a1206;
-  --ring: #e8b45f;
+  --ring: #c28d39;
+  --detail: #b38f6f;
+  --accent-2: #c28d39;
 
-  --success: #5fcf96;
-  --warning: #f0b048;
-  --danger: #ff7f7a;
+  --success: #62d3ae;
+  --warning: #f0b24e;
+  --danger: #ff7a7a;
   --info: #8fb6ff;
 
   --shade: 0 0 0;
-  --light: 255 255 255;
-  --raised: 0 14px 34px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.06);
-  --raised-sm: 0 6px 16px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.07);
-  --inset: inset 0 3px 10px rgb(0 0 0 / 0.65), inset 0 0 0 1px rgb(255 255 255 / 0.04);
-  --inset-sm: inset 0 2px 6px rgb(0 0 0 / 0.6), inset 0 0 0 1px rgb(255 255 255 / 0.05);
-  --glow: 0 0 22px rgb(226 169 79 / 0.35);
+  --raised:
+    0 1px 2px rgb(0 0 0 / 0.4), 0 24px 48px -20px rgb(0 0 0 / 0.75),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --raised-sm:
+    0 1px 2px rgb(0 0 0 / 0.4), 0 8px 18px -8px rgb(0 0 0 / 0.7),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --inset: inset 0 2px 8px rgb(0 0 0 / 0.55);
+  --inset-sm: inset 0 1px 4px rgb(0 0 0 / 0.5);
+  --glow: 0 2px 4px rgb(194 141 57 / 0.25), 0 12px 26px -8px rgb(194 141 57 / 0.5);
+  --tile-glow: 0 6px 14px -6px rgb(194 141 57 / 0.45);
 
   color-scheme: dark;
 }
@@ -83,6 +93,8 @@
   --color-primary-soft: var(--primary-soft);
   --color-primary-foreground: var(--primary-foreground);
   --color-ring: var(--ring);
+  --color-detail: var(--detail);
+  --color-accent-2: var(--accent-2);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
@@ -93,6 +105,7 @@
   --shadow-inset: var(--inset);
   --shadow-inset-sm: var(--inset-sm);
   --shadow-glow: var(--glow);
+  --shadow-tile: var(--tile-glow);
 
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -109,11 +122,11 @@
   html {
     @apply bg-background;
   }
-  /* A warm light source behind the dark theme, as in the reference. */
+  /* A faint crimson and gold light behind the dark theme. */
   .dark body {
     background-image:
-      radial-gradient(900px 500px at 85% -10%, rgb(226 169 79 / 0.1), transparent 70%),
-      radial-gradient(700px 500px at -10% 110%, rgb(196 132 44 / 0.08), transparent 70%);
+      radial-gradient(900px 500px at 85% -10%, rgb(194 141 57 / 0.08), transparent 70%),
+      radial-gradient(700px 500px at -10% 110%, rgb(113 0 20 / 0.18), transparent 70%);
     background-attachment: fixed;
   }
   body {
