@@ -370,3 +370,72 @@ export const createFolderSchema = z.object({
   visibility: z.enum(['EVERYONE', 'HR']).default('HR'),
 });
 export type CreateFolderInput = z.infer<typeof createFolderSchema>;
+
+// ---------- Onboarding and offboarding checklists ----------
+
+export const CHECKLIST_KINDS = ['ONBOARDING', 'OFFBOARDING'] as const;
+export type ChecklistKind = (typeof CHECKLIST_KINDS)[number];
+
+/** Who a task falls to. Resolved per employee: their manager, the employee, HR or IT. */
+export const TASK_ASSIGNEES = ['HR', 'MANAGER', 'EMPLOYEE', 'IT'] as const;
+export type TaskAssignee = (typeof TASK_ASSIGNEES)[number];
+
+export const templateTaskSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(1000).nullish(),
+  assignee: z.enum(TASK_ASSIGNEES),
+  /** Days from the joining date (onboarding) or last working day (offboarding); can be negative. */
+  dueOffsetDays: z.number().int().min(-180).max(365).default(0),
+  /** When set, the task points the person to upload this kind of document. */
+  documentCategory: z.string().trim().max(60).nullish(),
+});
+export type TemplateTaskInput = z.infer<typeof templateTaskSchema>;
+
+export const createTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  kind: z.enum(CHECKLIST_KINDS),
+  isDefault: z.boolean().default(false),
+  tasks: z.array(templateTaskSchema).min(1).max(60),
+});
+export type CreateTemplateInput = z.infer<typeof createTemplateSchema>;
+
+export const updateTemplateSchema = createTemplateSchema.omit({ kind: true }).partial();
+export type UpdateTemplateInput = z.infer<typeof updateTemplateSchema>;
+
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-30')
+  .refine((v) => !Number.isNaN(Date.parse(v)), 'Enter a real date');
+
+export const startChecklistSchema = z.object({
+  kind: z.enum(CHECKLIST_KINDS),
+  templateId: z.string().uuid().optional(),
+  /** Joining date for onboarding (defaults to the employee's); last working day for offboarding. */
+  startDate: isoDate.optional(),
+  /** Offboarding only, recorded on the exit. */
+  reason: z.enum(['RESIGNATION', 'TERMINATION', 'RETIREMENT', 'CONTRACT_END', 'OTHER']).optional(),
+});
+export type StartChecklistInput = z.infer<typeof startChecklistSchema>;
+
+export const listChecklistsQuerySchema = z.object({
+  kind: z.enum(CHECKLIST_KINDS).optional(),
+  status: z.enum(['OPEN', 'COMPLETED', 'CANCELLED']).optional(),
+  employeeId: z.string().uuid().optional(),
+  /** Only checklists with a task waiting on the caller. */
+  mine: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+});
+export type ListChecklistsQuery = z.infer<typeof listChecklistsQuerySchema>;
+
+export const updateTaskSchema = z.object({
+  done: z.boolean(),
+  note: z.string().trim().max(500).nullish(),
+});
+export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+
+export const addTaskSchema = templateTaskSchema
+  .omit({ dueOffsetDays: true })
+  .extend({ dueDate: isoDate.optional() });
+export type AddTaskInput = z.infer<typeof addTaskSchema>;
