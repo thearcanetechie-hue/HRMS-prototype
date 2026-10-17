@@ -50,7 +50,7 @@ export function RequireSession({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     setAccessToken(null);
-    router.replace('/login');
+    router.replace('/');
   }, [router]);
 
   const value = useMemo<Session | null>(() => {

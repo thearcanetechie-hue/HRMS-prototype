@@ -23,7 +23,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { Avatar } from '@/components/ui/avatar';
@@ -66,14 +65,17 @@ const ICONS: Record<string, LucideIcon> = {
 const pad = 'px-6 lg:px-24';
 const eyebrow = 'text-xs font-bold tracking-[0.12em] text-detail uppercase';
 
-/** Public landing page (screen 01). Signed-in visitors go straight to their workspace. */
+/**
+ * Public landing page (screen 01), the first thing anyone sees. People go on to sign in only
+ * when they choose to; someone already signed in gets a link back to their workspace instead.
+ */
 export default function LandingPage() {
-  const router = useRouter();
   const [billing, setBilling] = useState('yearly');
+  const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
-    refreshSession().then((ok) => ok && router.replace('/dashboard'));
-  }, [router]);
+    refreshSession().then(setSignedIn);
+  }, []);
 
   return (
     <div className="min-h-screen">
@@ -96,8 +98,11 @@ export default function LandingPage() {
             ))}
           </ul>
           <div className="ml-auto flex items-center gap-4">
-            <Link href="/login" className="font-semibold text-foreground no-underline">
-              Sign in
+            <Link
+              href={signedIn ? '/dashboard' : '/login'}
+              className="font-semibold text-foreground no-underline"
+            >
+              {signedIn ? 'Open your workspace' : 'Sign in'}
             </Link>
             <Button variant="primary" asChild className="hidden sm:inline-flex">
               <Link href="/signup">Start free trial</Link>
