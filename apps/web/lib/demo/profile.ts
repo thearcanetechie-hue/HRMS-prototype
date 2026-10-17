@@ -15,7 +15,6 @@ export type ProfileExtras = {
     overtime: string;
   };
   leave: { type: string; left: number; total: number; tone: Tone }[];
-  documents: { name: string; status: string }[];
   performance: { cycle: string; rating: string; goals: { title: string; pct: number }[] };
   timeline: LogEvent[];
 };
@@ -41,12 +40,6 @@ const extras: ProfileExtras = {
     { type: 'Sick leave', left: 8, total: 12, tone: 'warning' },
     { type: 'Casual leave', left: 5, total: 8, tone: 'success' },
     { type: 'Comp off', left: 1, total: 2, tone: 'primary' },
-  ],
-  documents: [
-    { name: 'Offer letter.pdf', status: 'Signed · 28 Dec 2023' },
-    { name: 'Aadhaar card.pdf', status: 'Verified' },
-    { name: 'PAN card.jpg', status: 'Verified' },
-    { name: 'Form 16 FY25.pdf', status: 'Issued 12 Jun' },
   ],
   performance: {
     cycle: 'H1 2026 review',

@@ -3,7 +3,6 @@
 import {
   CalendarDays,
   ChevronRight,
-  Download,
   Eye,
   EyeOff,
   FileText,
@@ -14,11 +13,11 @@ import {
   MessageSquare,
   Pencil,
   Phone,
-  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityLog } from './activity-log';
+import { EmployeeDocumentsCard } from './documents';
 import { InviteButton } from './invite-button';
 import { ProfileForm } from './profile-form';
 import { Badge } from './ui/badge';
@@ -272,37 +271,7 @@ export function EmployeeProfileView({
     </Card>
   );
 
-  const documentsCard = extras && (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Documents</CardTitle>
-          <CardDescription>{extras.documents.length} files</CardDescription>
-        </div>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/documents">
-            <Upload /> Upload
-          </Link>
-        </Button>
-      </CardHeader>
-      <ul className="grid gap-3">
-        {extras.documents.map((d) => (
-          <li key={d.name} className="flex items-center gap-3">
-            <IconTile tone="detail" size={36}>
-              <FileText />
-            </IconTile>
-            <div className="min-w-0 grow">
-              <div className="truncate font-semibold">{d.name}</div>
-              <div className="text-xs text-muted-foreground">{d.status}</div>
-            </div>
-            <Button variant="ghost" size="icon-sm" aria-label={`Download ${d.name}`} disabled>
-              <Download />
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
+  const documentsCard = <EmployeeDocumentsCard employeeId={employee.id} self={self} />;
 
   const performanceCard = extras && (
     <Card>
