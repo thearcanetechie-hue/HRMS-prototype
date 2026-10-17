@@ -1,102 +1,196 @@
 'use client';
 
-import { createEmployeeSchema, EMPLOYMENT_TYPES } from '@hrms/shared';
-import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Download, Filter, Upload, UserPlus } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { ActivityLog } from '@/components/activity-log';
+import { AddEmployee } from '@/components/add-employee';
 import { InviteButton } from '@/components/invite-button';
-import { PersonCell } from '@/components/person-cell';
+import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { SearchField } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Chip } from '@/components/ui/chip';
 import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
-import { Field, FormError, Input, Select } from '@/components/ui/input';
-import { Banner, PageHeader } from '@/components/ui/page';
+import { Field, Select } from '@/components/ui/input';
+import { Banner, Empty, PageHeader } from '@/components/ui/page';
+import { Skeleton } from '@/components/ui/progress';
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api, ApiError, Employee, Named, Paged } from '@/lib/api';
-import { formatDate, STATUS_TONE, titleCase as label } from '@/lib/format';
-import { FieldErrors, firstErrors, validate } from '@/lib/forms';
+import { getEmployeeLog, LAST_SEEN, type LogEvent } from '@/lib/demo/employees';
+import { initials, STATUS_TONE, titleCase } from '@/lib/format';
 import { useSession } from '@/lib/session';
+import { cn } from '@/lib/utils';
+
+const PAGE_SIZE = 9;
+const STATUSES = ['ACTIVE', 'ONBOARDING', 'ON_NOTICE', 'EXITED'] as const;
+type Status = (typeof STATUSES)[number];
 
 export default function EmployeesPage() {
+  // useSearchParams needs a Suspense boundary in the app router.
+  return (
+    <Suspense>
+      <Employees />
+    </Suspense>
+  );
+}
+
+function Employees() {
   const { can } = useSession();
-  // People without employee.read get the directory: no joining date, status or access columns.
+  const router = useRouter();
+  const params = useSearchParams();
   const full = can('employee.read');
   const manage = can('employee.manage');
+
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<Status | ''>('');
+  const [departmentId, setDepartmentId] = useState('');
+  const [page, setPage] = useState(1);
   const [data, setData] = useState<Paged<Employee> | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [departments, setDepartments] = useState<Named[]>([]);
+  const [log, setLog] = useState<LogEvent[] | null>(null);
   const [error, setError] = useState('');
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(params.get('add') === '1');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const q = new URLSearchParams({ pageSize: '100', ...(search ? { search } : {}) });
+      const q = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+        ...(search ? { search } : {}),
+        ...(status ? { status } : {}),
+        ...(departmentId ? { departmentId } : {}),
+      });
       setData(await api<Paged<Employee>>(`/employees?${q}`));
       setError('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load employees.');
     }
-  }, [search]);
+  }, [search, status, departmentId, page]);
+
+  const loadCounts = useCallback(() => {
+    if (!full) return;
+    const count = (s = '') =>
+      api<Paged<Employee>>(`/employees?pageSize=1${s && `&status=${s}`}`).then(
+        (r) => [s || 'ALL', r.total] as const,
+      );
+    Promise.all([count(), ...STATUSES.map(count)])
+      .then((pairs) => setCounts(Object.fromEntries(pairs)))
+      .catch(() => undefined);
+  }, [full]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load]);
+  useEffect(loadCounts, [loadCounts]);
+  useEffect(() => {
+    api<Named[]>('/org/departments')
+      .then(setDepartments)
+      .catch(() => undefined);
+    if (full) getEmployeeLog().then(setLog);
+  }, [full]);
 
-  return (
-    <>
-      <PageHeader
-        title={full ? 'Employees' : 'Directory'}
-        description={data ? `${data.total} ${data.total === 1 ? 'person' : 'people'}` : 'Loading…'}
-        actions={
-          <>
-            <div className="relative w-full sm:w-64">
-              <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-10"
-                placeholder="Search name, email or code"
-                aria-label="Search employees"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            {manage && (
-              <Button variant="primary" onClick={() => setAdding(true)}>
-                <Plus /> Add employee
-              </Button>
-            )}
-          </>
-        }
-      />
+  const filterCount = [status, departmentId].filter(Boolean).length;
+  const clearFilters = () => {
+    setStatus('');
+    setDepartmentId('');
+    setSearch('');
+    setPage(1);
+  };
+  const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  const from = data && data.total ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const to = data ? Math.min(page * PAGE_SIZE, data.total) : 0;
+
+  const directory = (
+    <div className="grid min-w-0 content-start gap-4">
+      {full && (
+        <div className="flex flex-wrap gap-2.5">
+          {(['', ...STATUSES] as const).map((s) => (
+            <Chip
+              key={s || 'ALL'}
+              active={status === s}
+              onClick={() => {
+                setStatus(s);
+                setPage(1);
+              }}
+            >
+              {s ? titleCase(s) : 'All'}
+              {counts[s || 'ALL'] != null && (
+                <span className="font-mono text-xs opacity-80">{counts[s || 'ALL']}</span>
+              )}
+            </Chip>
+          ))}
+        </div>
+      )}
       {error && <Banner>{error}</Banner>}
       <Table>
         <THead>
           <tr>
             <TH>Employee</TH>
             <TH>Code</TH>
-            <TH>Department</TH>
-            <TH>Designation</TH>
+            <TH>Team</TH>
             <TH>Location</TH>
-            {full && <TH>Joined</TH>}
             {full && <TH>Status</TH>}
+            {full && <TH className="text-right">Last seen</TH>}
             {manage && <TH>Access</TH>}
           </tr>
         </THead>
         <TBody>
-          {data?.items.map((e) => (
-            <TR key={e.id}>
+          {!data &&
+            [0, 1, 2, 3].map((i) => (
+              <TR key={i}>
+                <TD colSpan={7}>
+                  <Skeleton className="h-9" />
+                </TD>
+              </TR>
+            ))}
+          {data?.items.map((e, i) => (
+            <TR
+              key={e.id}
+              className="cursor-pointer"
+              onClick={(ev) => {
+                if (!(ev.target as HTMLElement).closest('a,button'))
+                  router.push(`/employees/${e.id}`);
+              }}
+            >
               <TD>
-                <PersonCell employee={e} />
+                <Link
+                  href={`/employees/${e.id}`}
+                  className="group flex min-w-52 items-center gap-3 text-inherit no-underline"
+                >
+                  <Avatar size="sm" initials={initials(e.firstName, e.lastName)} />
+                  <div className="min-w-0">
+                    <div className="font-bold whitespace-nowrap group-hover:text-primary">
+                      {e.firstName} {e.lastName}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {e.designation?.name ?? e.workEmail}
+                    </div>
+                  </div>
+                </Link>
               </TD>
               <TD className="font-mono text-[13px]">{e.employeeCode}</TD>
               <TD>{e.department?.name ?? '–'}</TD>
-              <TD>{e.designation?.name ?? '–'}</TD>
               <TD>{e.location?.name ?? '–'}</TD>
               {full && (
-                <TD className="whitespace-nowrap tabular">
-                  {e.dateOfJoining ? formatDate(e.dateOfJoining) : '–'}
+                <TD>
+                  {e.status && (
+                    <Badge tone={e.status === 'EXITED' ? 'neutral' : STATUS_TONE[e.status]}>
+                      {titleCase(e.status)}
+                    </Badge>
+                  )}
                 </TD>
               )}
               {full && (
-                <TD>{e.status && <Badge tone={STATUS_TONE[e.status]}>{label(e.status)}</Badge>}</TD>
+                <TD className="text-right whitespace-nowrap text-muted-foreground">
+                  {e.status === 'EXITED' ? 'Left' : LAST_SEEN[i % LAST_SEEN.length]}
+                </TD>
               )}
               {manage && (
                 <TD>
@@ -107,129 +201,195 @@ export default function EmployeesPage() {
           ))}
         </TBody>
       </Table>
-      {data && data.items.length === 0 && <TableEmpty>No one matches that search.</TableEmpty>}
+      {data && data.items.length === 0 && (
+        <div className="grid justify-items-center gap-3">
+          <TableEmpty>No one matches these filters</TableEmpty>
+          <Button size="sm" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        </div>
+      )}
+      {data && data.total > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-muted-foreground">
+          <span>
+            Showing {from}–{to} of {data.total}
+          </span>
+          <nav aria-label="Pages" className="flex gap-1.5">
+            {Array.from({ length: Math.min(pages, 7) }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                type="button"
+                aria-current={p === page ? 'page' : undefined}
+                onClick={() => setPage(p)}
+                className={cn(
+                  'grid size-8 cursor-pointer place-items-center rounded-[10px] font-bold tabular',
+                  p === page
+                    ? 'bg-primary text-primary-foreground shadow-glow'
+                    : 'bg-surface text-foreground shadow-raised-sm',
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="People"
+        title={full ? 'Employees' : 'Directory'}
+        description={
+          counts.ALL != null
+            ? `${counts.ALL} ${counts.ALL === 1 ? 'person' : 'people'} across ${departments.length} teams.`
+            : data
+              ? `${data.total} people`
+              : 'Loading…'
+        }
+        actions={
+          manage && (
+            <>
+              <Button asChild>
+                <Link href="/onboarding/team">
+                  <Upload /> Import
+                </Link>
+              </Button>
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                <UserPlus /> Add employee
+              </Button>
+            </>
+          )
+        }
+      />
+
+      <Tabs defaultValue="directory" className="grid gap-5">
+        <div className="flex flex-wrap items-center gap-3">
+          {full ? (
+            <TabsList>
+              <TabsTrigger value="directory">Directory</TabsTrigger>
+              <TabsTrigger value="log">Activity log</TabsTrigger>
+              <TabsTrigger value="org">Org chart</TabsTrigger>
+            </TabsList>
+          ) : null}
+          <div className="ml-auto flex w-full gap-3 sm:w-auto">
+            <SearchField
+              className="sm:w-[280px]"
+              placeholder="Name, code or email"
+              aria-label="Search employees"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+            <Button className="h-11" onClick={() => setFiltersOpen(true)}>
+              <Filter /> Filters{filterCount ? ` · ${filterCount}` : ''}
+            </Button>
+          </div>
+        </div>
+
+        <TabsContent value="directory">
+          {full ? (
+            <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+              {directory}
+              <Card className="content-start">
+                <CardHeader>
+                  <div>
+                    <CardTitle>Employee log</CardTitle>
+                    <CardDescription>Every change, in order</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="sm" disabled title="Coming soon">
+                    <Download /> Export
+                  </Button>
+                </CardHeader>
+                {log ? <ActivityLog events={log} /> : <Skeleton className="h-60" />}
+              </Card>
+            </div>
+          ) : (
+            directory
+          )}
+        </TabsContent>
+        <TabsContent value="log">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Activity log</CardTitle>
+                <CardDescription>Every change, in order</CardDescription>
+              </div>
+            </CardHeader>
+            {log ? <ActivityLog events={log} /> : <Skeleton className="h-60" />}
+          </Card>
+        </TabsContent>
+        <TabsContent value="org">
+          <Card>
+            <Empty>The org chart is coming soon.</Empty>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <DialogContent title="Filters" side="right" aria-describedby={undefined}>
+          <div className="grid gap-4">
+            <Field id="f-team" label="Team">
+              <Select
+                id="f-team"
+                value={departmentId}
+                onChange={(e) => {
+                  setDepartmentId(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All teams</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {full && (
+              <Field id="f-status" label="Status">
+                <Select
+                  id="f-status"
+                  value={status}
+                  onChange={(e) => {
+                    setStatus(e.target.value as Status | '');
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Any status</option>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {titleCase(s)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            <div className="flex gap-3">
+              <DialogClose asChild>
+                <Button variant="primary">Show results</Button>
+              </DialogClose>
+              <Button onClick={clearFilters}>Clear</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={adding} onOpenChange={setAdding}>
         {adding && (
           <AddEmployee
             onCreated={() => {
               setAdding(false);
               void load();
+              loadCounts();
             }}
           />
         )}
       </Dialog>
     </>
-  );
-}
-function AddEmployee({ onCreated }: { onCreated: () => void }) {
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [formError, setFormError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [options, setOptions] = useState<{
-    departments: Named[];
-    designations: Named[];
-    locations: Named[];
-  }>({
-    departments: [],
-    designations: [],
-    locations: [],
-  });
-
-  useEffect(() => {
-    Promise.all([
-      api<Named[]>('/org/departments'),
-      api<Named[]>('/org/designations'),
-      api<Named[]>('/org/locations'),
-    ])
-      .then(([departments, designations, locations]) =>
-        setOptions({ departments, designations, locations }),
-      )
-      .catch(() => undefined);
-  }, []);
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setFormError('');
-    const raw = Object.fromEntries(
-      [...new FormData(e.currentTarget)].map(([k, v]) => [k, v === '' ? undefined : v]),
-    );
-    const { data, errors } = validate(createEmployeeSchema, raw);
-    setErrors(errors ?? {});
-    if (!data) return;
-    setBusy(true);
-    try {
-      await api('/employees', { method: 'POST', body: JSON.stringify(data) });
-      onCreated();
-    } catch (err) {
-      if (err instanceof ApiError && Object.keys(err.fieldErrors).length)
-        setErrors(firstErrors(err.fieldErrors));
-      else setFormError(err instanceof ApiError ? err.message : 'Could not save.');
-      setBusy(false);
-    }
-  }
-
-  const select = (name: string, items: Named[]) => (
-    <Select id={name} name={name} defaultValue="">
-      <option value="">Not set</option>
-      {items.map((i) => (
-        <option key={i.id} value={i.id}>
-          {i.name}
-        </option>
-      ))}
-    </Select>
-  );
-
-  return (
-    <DialogContent title="Add employee" side="right" aria-describedby={undefined}>
-      <form onSubmit={onSubmit} noValidate className="grid gap-4 sm:grid-cols-2">
-        <Field id="firstName" label="First name" error={errors.firstName}>
-          <Input id="firstName" name="firstName" required />
-        </Field>
-        <Field id="lastName" label="Last name" error={errors.lastName}>
-          <Input id="lastName" name="lastName" />
-        </Field>
-        <Field className="sm:col-span-2" id="workEmail" label="Work email" error={errors.workEmail}>
-          <Input id="workEmail" name="workEmail" type="email" required />
-        </Field>
-        <Field id="employeeCode" label="Employee code" error={errors.employeeCode}>
-          <Input id="employeeCode" name="employeeCode" required />
-        </Field>
-        <Field id="dateOfJoining" label="Date of joining" error={errors.dateOfJoining}>
-          <Input id="dateOfJoining" name="dateOfJoining" type="date" required />
-        </Field>
-        <Field id="phone" label="Phone" error={errors.phone}>
-          <Input id="phone" name="phone" type="tel" />
-        </Field>
-        <Field id="employmentType" label="Employment type" error={errors.employmentType}>
-          <Select id="employmentType" name="employmentType" defaultValue="FULL_TIME">
-            {EMPLOYMENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {label(t)}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field id="departmentId" label="Department" error={errors.departmentId}>
-          {select('departmentId', options.departments)}
-        </Field>
-        <Field id="designationId" label="Designation" error={errors.designationId}>
-          {select('designationId', options.designations)}
-        </Field>
-        <Field className="sm:col-span-2" id="locationId" label="Location" error={errors.locationId}>
-          {select('locationId', options.locations)}
-        </Field>
-        <div className="sm:col-span-2">
-          <FormError>{formError}</FormError>
-        </div>
-        <div className="flex gap-3 sm:col-span-2">
-          <Button variant="primary" type="submit" disabled={busy}>
-            {busy ? 'Saving…' : 'Add employee'}
-          </Button>
-          <DialogClose asChild>
-            <Button type="button">Cancel</Button>
-          </DialogClose>
-        </div>
-      </form>
-    </DialogContent>
   );
 }
