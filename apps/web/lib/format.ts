@@ -14,3 +14,15 @@ export const STATUS_TONE: Record<string, BadgeTone> = {
   ON_NOTICE: 'warning',
   EXITED: 'danger',
 };
+
+const inrFormat = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+
+/** Indian rupees with Indian digit grouping: `₹ 1,12,40,000`. */
+export const inr = (n: number) => `₹ ${inrFormat.format(n)}`;
+
+/** Plain number with Indian digit grouping. */
+export const num = (n: number) => inrFormat.format(n);
+
+/** Pretend network delay for screens that run on demo data, so loading states are real. */
+export const demoDelay = <T>(value: T, ms = 250) =>
+  new Promise<T>((resolve) => setTimeout(() => resolve(value), ms));
