@@ -2,7 +2,60 @@ import { ShieldCheck, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme';
+import { Avatar } from './ui/avatar';
 import { IconTile } from './ui/page';
+
+const STATS = [
+  ['98.6%', 'Payroll on time'],
+  ['3 min', 'To approve leave'],
+  ['1,240', 'Companies'],
+] as const;
+
+/** Always-dark brand panel on the left of the sign-in screen. */
+export function BrandPanel() {
+  return (
+    <aside className="dark hidden min-h-screen w-[min(620px,45vw)] shrink-0 flex-col bg-background px-14 py-12 text-foreground lg:flex">
+      <div className="flex items-center gap-3 text-lg font-extrabold">
+        <Logo /> HRMS
+      </div>
+      <div className="mt-auto grid gap-8 pt-10">
+        <div>
+          <p className="mb-3 text-xs font-bold tracking-[0.12em] text-primary uppercase">
+            Your people, in one place
+          </p>
+          <h1 className="text-[clamp(30px,2.8vw,40px)] leading-[1.12] font-extrabold">
+            Run HR the calm way. Attendance, payroll and growth in one workspace.
+          </h1>
+          <p className="mt-4 text-base text-muted-foreground">
+            Built for Indian teams: PF, ESI, PT and TDS handled, payslips on time, and every
+            document a search away.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          {STATS.map(([n, l]) => (
+            <div key={l} className="rounded-2xl bg-surface p-4 shadow-raised-sm">
+              <div className="text-2xl font-extrabold text-primary tabular">{n}</div>
+              <div className="text-[13px] font-semibold text-muted-foreground">{l}</div>
+            </div>
+          ))}
+        </div>
+        <figure className="rounded-2xl bg-surface p-6 shadow-raised-sm">
+          <blockquote className="text-[15px] leading-relaxed">
+            “We closed October payroll for 340 people in an afternoon. The compliance reports were
+            simply there.”
+          </blockquote>
+          <figcaption className="mt-4 flex items-center gap-3">
+            <Avatar initials="RN" size="sm" />
+            <div>
+              <div className="font-bold">Rohan Nair</div>
+              <div className="text-xs text-muted-foreground">Head of People, Kestrel Labs</div>
+            </div>
+          </figcaption>
+        </figure>
+      </div>
+    </aside>
+  );
+}
 
 const POINTS = [
   [ShieldCheck, "Every company's data kept separate, visible only to people you allow"],

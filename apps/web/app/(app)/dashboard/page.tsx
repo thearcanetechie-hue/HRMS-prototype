@@ -1,164 +1,314 @@
 'use client';
 
 import {
-  BarChart3,
-  Building2,
+  Award,
   CalendarDays,
-  ChevronRight,
+  CheckCircle2,
   Clock,
-  FileText,
-  GraduationCap,
-  HeartHandshake,
-  MessagesSquare,
-  Receipt,
-  Sparkles,
-  Target,
+  Inbox,
+  Play,
+  Star,
   UserCheck,
   UserPlus,
   Users,
-  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Calendar } from '@/components/ui/calendar';
+import { BarChart } from '@/components/ui/bar-chart';
+import { ActivityItem, ApproveButtons, LegendDot, Toast, useToast } from '@/components/ui/bits';
+import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { IconTile, PageHeader } from '@/components/ui/page';
-
-import { api, Named, Paged, Employee } from '@/lib/api';
+import { Banner, DemoBadge, Empty, PageHeader } from '@/components/ui/page';
+import { ProgressBar, Skeleton } from '@/components/ui/progress';
+import { ProgressRing } from '@/components/ui/progress-ring';
+import { StatCard } from '@/components/ui/stat-card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { Tone } from '@/components/ui/tone';
+import { api, Employee, Paged } from '@/lib/api';
+import { getHomeSummary, type HomeSummary } from '@/lib/demo/home';
 import { useSession } from '@/lib/session';
 
-const MODULES: { name: string; icon: LucideIcon; phase: number }[] = [
-  { name: 'Onboarding & offboarding', icon: UserPlus, phase: 2 },
-  { name: 'Attendance & biometrics', icon: Clock, phase: 2 },
-  { name: 'Leave', icon: CalendarDays, phase: 2 },
-  { name: 'Documents', icon: FileText, phase: 2 },
-  { name: 'Payroll & compliance', icon: Wallet, phase: 3 },
-  { name: 'Expenses & reimbursements', icon: Receipt, phase: 3 },
-  { name: 'Performance & assessments', icon: Target, phase: 4 },
-  { name: 'Learning & development', icon: GraduationCap, phase: 4 },
-  { name: 'Engagement & feedback', icon: HeartHandshake, phase: 4 },
-  { name: 'Communication & meetings', icon: MessagesSquare, phase: 4 },
-  { name: 'Analytics & reporting', icon: BarChart3, phase: 5 },
-  { name: 'AI assistant', icon: Sparkles, phase: 5 },
-];
+const EVENT_ICON: Record<HomeSummary['events'][number]['kind'], [LucideIcon, Tone]> = {
+  birthday: [Star, 'primary'],
+  anniversary: [Award, 'detail'],
+  holiday: [CalendarDays, 'warning'],
+  joining: [UserPlus, 'success'],
+};
 
-export default function DashboardPage() {
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
+
+export default function HomePage() {
   const { me, can } = useSession();
-  const [stats, setStats] = useState<{
-    total: number;
-    active: number;
-    onboarding: number;
-    departments: number;
-  } | null>(null);
+  const [data, setData] = useState<HomeSummary | null>(null);
+  const [error, setError] = useState(false);
+  const [headcount, setHeadcount] = useState<number | null>(null);
+  const [range, setRange] = useState('week');
+  const [toast, showToast] = useToast();
 
+  const load = () => {
+    setError(false);
+    getHomeSummary()
+      .then(setData)
+      .catch(() => setError(true));
+  };
+  useEffect(load, []);
+
+  // Headcount is real: it comes from the employees API.
   useEffect(() => {
     if (!can('employee.read')) return;
-    const count = (q = '') =>
-      api<Paged<Employee>>(`/employees?pageSize=1${q}`).then((r) => r.total);
-    Promise.all([
-      count(),
-      count('&status=ACTIVE'),
-      count('&status=ONBOARDING'),
-      api<Named[]>('/org/departments'),
-    ])
-      .then(([total, active, onboarding, departments]) =>
-        setStats({ total, active, onboarding, departments: departments.length }),
-      )
-      .catch(() => setStats(null));
+    api<Paged<Employee>>('/employees?pageSize=1')
+      .then((r) => setHeadcount(r.total))
+      .catch(() => setHeadcount(null));
   }, [can]);
 
-  const kpis: [string, number | undefined, LucideIcon][] = [
-    ['Employees', stats?.total, Users],
-    ['Active', stats?.active, UserCheck],
-    ['Onboarding', stats?.onboarding, UserPlus],
-    ['Departments', stats?.departments, Building2],
-  ];
+  function decide(id: string, name: string, approved: boolean) {
+    setData((d) => d && { ...d, requests: d.requests.filter((r) => r.id !== id) });
+    showToast(`${approved ? 'Approved' : 'Declined'} ${name}'s request`);
+  }
+
+  const today = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  const firstName = me.user.fullName.split(' ')[0];
+  const total = headcount ?? data?.headcount;
+  const hr = can('employee.read');
+  const biggestTeam = Math.max(1, ...(data?.teams.map((t) => t.count) ?? [1]));
 
   return (
     <>
       <PageHeader
-        eyebrow={me.tenant.name}
-        title={`Good to see you, ${me.user.fullName.split(' ')[0]}`}
-        description="Here's your workspace at a glance."
+        eyebrow={today}
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            {greeting()}, {firstName} <DemoBadge />
+          </span>
+        }
+        description={
+          data
+            ? `${data.presentToday} of ${data.headcount} people are in today. ${data.openRequests} requests are waiting for you.`
+            : 'Loading today’s numbers…'
+        }
+        actions={
+          hr && (
+            <>
+              <Button asChild>
+                <Link href="/employees?add=1">
+                  <UserPlus /> Add employee
+                </Link>
+              </Button>
+              <Button variant="primary" asChild>
+                <Link href="/payroll">
+                  <Play /> Run {data?.payroll.month ?? 'this month’s'} payroll
+                </Link>
+              </Button>
+            </>
+          )
+        }
       />
 
-      {!can('employee.read') && (
-        <div className="mb-6 grid gap-5 sm:grid-cols-2">
-          {[
-            {
-              href: '/profile',
-              title: 'My profile',
-              icon: FileText,
-              text: 'Add your PAN, Aadhaar, bank account and emergency contact.',
-            },
-            {
-              href: can('team.read') ? '/team' : '/employees',
-              title: can('team.read') ? 'My team' : 'Directory',
-              icon: Users,
-              text: can('team.read') ? 'See everyone in your reporting line.' : 'Find a colleague.',
-            },
-          ].map((c) => (
-            <Link key={c.href} href={c.href} className="group text-inherit no-underline">
-              <Card className="flex items-center gap-4 transition-transform group-hover:-translate-y-0.5">
-                <IconTile>
-                  <c.icon />
-                </IconTile>
-                <div className="grow">
-                  <CardTitle>{c.title}</CardTitle>
-                  <CardDescription>{c.text}</CardDescription>
-                </div>
-                <ChevronRight className="size-5 text-muted-foreground" />
-              </Card>
-            </Link>
-          ))}
-        </div>
+      {error && (
+        <Banner>
+          Could not load today’s summary.
+          <Button size="sm" className="ml-auto" onClick={load}>
+            Retry
+          </Button>
+        </Banner>
       )}
 
-      {can('employee.read') && (
-        <div className="mb-6 grid gap-5 lg:grid-cols-[1fr_320px]">
-          <div className="grid grid-cols-2 gap-5">
-            {kpis.map(([label, value, Icon]) => (
-              <Card key={label} className="flex items-center gap-4">
-                <IconTile>
-                  <Icon />
-                </IconTile>
-                <div>
-                  <div className="text-[13px] font-semibold text-muted-foreground">{label}</div>
-                  <div className="text-[28px] leading-tight font-extrabold tabular">
-                    {value ?? '–'}
-                  </div>
-                </div>
-              </Card>
+      {!data ? (
+        <div className="grid gap-5">
+          <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-36 rounded-2xl" />
             ))}
           </div>
-          {/* Desktop only: on phones the KPI tiles are enough above the fold. */}
-          <Card className="hidden lg:block">
-            <Calendar />
-          </Card>
+          <Skeleton className="h-72 rounded-2xl" />
+        </div>
+      ) : (
+        <div className="grid gap-5">
+          <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
+            <StatCard
+              icon={<Users />}
+              value={total}
+              label="Headcount"
+              delta={`+${data.joinedThisMonth} this month`}
+            />
+            <StatCard
+              icon={<UserCheck />}
+              tone="success"
+              value={data.presentToday}
+              label="Present today"
+              delta={`${Math.round((data.presentToday / data.headcount) * 100)}%`}
+            />
+            <StatCard
+              icon={<CalendarDays />}
+              tone="warning"
+              value={data.onLeave}
+              label="On leave"
+              delta={`${data.sickToday} sick`}
+              deltaTone="warning"
+            />
+            <StatCard
+              icon={<Inbox />}
+              tone="danger"
+              value={data.openRequests}
+              label="Open requests"
+              delta={`${data.urgentRequests} urgent`}
+              deltaTone="danger"
+            />
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-[1fr_400px]">
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Attendance this {range}</CardTitle>
+                  <CardDescription>Share of people checked in by 10:00</CardDescription>
+                </div>
+                <Tabs value={range} onValueChange={setRange}>
+                  <TabsList>
+                    <TabsTrigger value="week">Week</TabsTrigger>
+                    <TabsTrigger value="month">Month</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </CardHeader>
+              <BarChart
+                label="Attendance"
+                max={100}
+                format={(v) => `${v}%`}
+                highlight={range === 'week' ? 'Fri 16' : 'Oct'}
+                data={(range === 'week' ? data.attendanceWeek : data.attendanceMonth).map((d) => ({
+                  label: d.label,
+                  value: d.pct,
+                }))}
+              />
+              <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2">
+                <LegendDot className="bg-primary" label="On time" value="88%" />
+                <LegendDot className="bg-warning" label="Late" value="5%" />
+                <LegendDot className="bg-detail" label="Field visit" value="3%" />
+                <LegendDot className="bg-danger" label="Absent" value="4%" />
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Needs your attention</CardTitle>
+                  <CardDescription>{data.openRequests} open</CardDescription>
+                </div>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/inbox">View all</Link>
+                </Button>
+              </CardHeader>
+              {data.requests.length ? (
+                <ul className="grid gap-2.5">
+                  {data.requests.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex items-center gap-3 rounded-[14px] bg-surface-2/70 p-3"
+                    >
+                      <Avatar size="sm" initials={r.employee.initials} />
+                      <div className="min-w-0 grow">
+                        <div className="truncate font-bold">{r.employee.name}</div>
+                        <div className="truncate text-xs text-muted-foreground">{r.summary}</div>
+                      </div>
+                      <ApproveButtons
+                        subject={`${r.employee.name}: ${r.summary}`}
+                        onApprove={() => decide(r.id, r.employee.name, true)}
+                        onDecline={() => decide(r.id, r.employee.name, false)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Empty className="py-10">Nothing waiting for you.</Empty>
+              )}
+            </Card>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>{data.payroll.month} payroll</CardTitle>
+                  <CardDescription>
+                    Pay date {data.payroll.payDate} · {data.payroll.daysLeft} days left
+                  </CardDescription>
+                </div>
+                <Badge tone="accent">In progress</Badge>
+              </CardHeader>
+              <div className="mb-5 flex justify-center">
+                <ProgressRing value={data.payroll.readyPct} label="Payroll ready" caption="ready" />
+              </div>
+              <ul className="grid gap-2.5">
+                {data.payroll.checks.map((c) => {
+                  const done = c.done === c.total;
+                  const Icon = done ? CheckCircle2 : Clock;
+                  return (
+                    <li key={c.label} className="flex items-center gap-2.5">
+                      <Icon className={done ? 'size-4 text-success' : 'size-4 text-warning'} />
+                      <span className="grow font-semibold">{c.label}</span>
+                      <span className="font-mono text-[13px] text-muted-foreground">
+                        {c.done} / {c.total}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Coming up</CardTitle>
+                  <CardDescription>Next 14 days</CardDescription>
+                </div>
+              </CardHeader>
+              <ul className="grid gap-4">
+                {data.events.map((e) => {
+                  const [Icon, tone] = EVENT_ICON[e.kind];
+                  return (
+                    <li key={e.title}>
+                      <ActivityItem icon={<Icon />} tone={tone} title={e.title} caption={e.when} />
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Headcount by team</CardTitle>
+                  <CardDescription>{total} people</CardDescription>
+                </div>
+              </CardHeader>
+              <ul className="grid gap-3.5">
+                {data.teams.map((t) => (
+                  <li key={t.name} className="grid gap-1.5">
+                    <div className="flex justify-between gap-2">
+                      <span className="font-semibold">{t.name}</span>
+                      <span className="font-mono text-[13px] text-muted-foreground">{t.count}</span>
+                    </div>
+                    <ProgressBar value={(t.count / biggestTeam) * 100} label={t.name} />
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Modules</CardTitle>
-          <Badge tone="accent">Foundation live</Badge>
-        </CardHeader>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {MODULES.map((m) => (
-            <div key={m.name} className="flex items-center gap-3 rounded-xl bg-surface-2/60 p-3">
-              <IconTile className="size-9 bg-surface text-muted-foreground shadow-raised-sm">
-                <m.icon />
-              </IconTile>
-              <div className="grow text-[13.5px] font-semibold">{m.name}</div>
-              <span className="text-[11px] font-bold whitespace-nowrap text-muted-foreground">
-                Phase {m.phase}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <Toast message={toast} />
     </>
   );
 }
