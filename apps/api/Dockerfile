@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
+# Uploaded documents (encrypted) live here; mount a volume so they survive restarts.
+RUN mkdir -p /data/documents && chown node:node /data/documents
+ENV STORAGE_DIR=/data/documents
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s \
