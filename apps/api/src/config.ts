@@ -18,6 +18,8 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   API_PORT: z.coerce.number().int().default(4000),
   WEB_ORIGIN: z.string().default('http://localhost:3000'),
+  /** Folder for uploaded documents (encrypted at rest). Swap for object storage in production. */
+  STORAGE_DIR: z.string().default('storage'),
 });
 
 export type Env = z.infer<typeof envSchema>;

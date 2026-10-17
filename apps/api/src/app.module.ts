@@ -10,6 +10,7 @@ import { PrismaExceptionFilter } from './common/prisma-exception.filter';
 import { requestContext } from './common/request-context';
 import { validateEnv } from './config';
 import { CryptoModule } from './crypto/crypto.module';
+import { DocumentsModule } from './documents/documents.module';
 import { EmployeesModule } from './employees/employees.module';
 import { HealthController } from './health/health.controller';
 import { OrgModule } from './org/org.module';
@@ -27,6 +28,7 @@ import { RolesModule } from './roles/roles.module';
     OrgModule,
     EmployeesModule,
     RolesModule,
+    DocumentsModule,
   ],
   controllers: [HealthController],
   providers: [

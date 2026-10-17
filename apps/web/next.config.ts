@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../../'),
   poweredByHeader: false,
   transpilePackages: ['@hrms/shared'],
+  experimental: {
+    // Requests proxied to the API are buffered up to this size; documents can be 20 MB.
+    middlewareClientMaxBodySize: '25mb',
+  },
   // The browser only talks to this origin; /api/* is proxied to the NestJS API,
   // which keeps the refresh cookie first-party and avoids CORS in production.
   async rewrites() {

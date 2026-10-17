@@ -33,3 +33,22 @@ export function inrShort(n: number) {
   if (n >= 1e5) return `₹ ${(n / 1e5).toFixed(1).replace(/\.0$/, '')} L`;
   return inr(n);
 }
+
+/** File size for people: `412 KB`, `3.4 MB`. */
+export function fileSize(bytes: number) {
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} KB`;
+  return `${bytes} B`;
+}
+
+/** Short file type label from a MIME type: PDF, JPG, DOCX… */
+export function fileKind(mime: string, name = '') {
+  const map: Record<string, string> = {
+    'application/pdf': 'PDF',
+    'image/jpeg': 'JPG',
+    'image/png': 'PNG',
+    'image/webp': 'WEBP',
+    'text/csv': 'CSV',
+  };
+  return map[mime] ?? name.split('.').pop()?.toUpperCase() ?? 'FILE';
+}

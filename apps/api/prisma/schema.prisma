@@ -71,6 +71,8 @@ model Tenant {
   locations     Location[]
   legalEntities LegalEntity[]
   auditLogs     AuditLog[]
+  documents     Document[]
+  folders       DocumentFolder[]
 }
 
 model User {
@@ -237,6 +239,7 @@ model Employee {
   manager     Employee?        @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
   reports     Employee[]       @relation("Reports")
   profile     EmployeeProfile?
+  documents   Document[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -316,4 +319,65 @@ model AuditLog {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, entity, entityId])
+}
+
+enum DocumentStatus {
+  PROCESSING
+  NEEDS_REVIEW
+  VERIFIED
+  SIGNED
+  ISSUED
+  REJECTED
+}
+
+enum FolderVisibility {
+  /// Everyone in the workspace can read, for example company policies.
+  EVERYONE
+  /// Only people with document.read, for example payroll and contracts.
+  HR
+}
+
+/// Company-level folders. Employee files are not folders: they hang off the employee.
+model DocumentFolder {
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @db.Uuid
+  name       String
+  visibility FolderVisibility @default(HR)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documents Document[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+/// A stored file. Belongs to exactly one employee or one company folder. The bytes live in
+/// storage (src/documents/document-storage.ts), encrypted with the workspace key; only the
+/// storage key is kept here. Deleting sets deletedAt so the audit trail keeps its target.
+model Document {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @db.Uuid
+  employeeId   String?        @db.Uuid
+  folderId     String?        @db.Uuid
+  name         String
+  category     String         @default("Other")
+  mimeType     String
+  size         Int
+  sha256       String
+  storageKey   String
+  status       DocumentStatus @default(NEEDS_REVIEW)
+  uploadedById String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  deletedAt    DateTime?
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee?       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  folder   DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, folderId])
+  @@index([tenantId, createdAt])
 }

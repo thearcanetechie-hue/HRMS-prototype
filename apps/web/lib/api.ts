@@ -34,14 +34,17 @@ export function refreshSession(): Promise<boolean> {
   return refreshing;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+/** Fetches with the access token, refreshing it once on a 401. Throws ApiError when not ok. */
+async function send(path: string, init: RequestInit, retry: boolean): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // FormData sets its own multipart Content-Type with the boundary.
+  if (typeof init.body === 'string' && !headers.has('Content-Type'))
+    headers.set('Content-Type', 'application/json');
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
   const res = await fetch(`/api${path}`, { ...init, headers, credentials: 'same-origin' });
 
   if (res.status === 401 && retry && !path.startsWith('/auth/')) {
-    if (await refreshSession()) return api<T>(path, init, false);
+    if (await refreshSession()) return send(path, init, false);
   }
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as {
@@ -49,9 +52,23 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
       errors?: Record<string, string[]>;
     };
     const message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
-    throw new ApiError(res.status, message ?? res.statusText, body.errors);
+    throw new ApiError(
+      res.status,
+      res.status === 413 ? 'Files can be up to 20 MB' : (message ?? res.statusText),
+      body.errors,
+    );
   }
+  return res;
+}
+
+export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const res = await send(path, init, retry);
   return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+/** Downloads a protected file (sent with the access token) as a Blob. */
+export async function apiBlob(path: string): Promise<Blob> {
+  return (await send(path, {}, true)).blob();
 }
 
 export interface Me {
@@ -118,4 +135,53 @@ export interface Paged<T> {
 export interface Named {
   id: string;
   name: string;
+}
+
+export type DocumentStatus =
+  'PROCESSING' | 'NEEDS_REVIEW' | 'VERIFIED' | 'SIGNED' | 'ISSUED' | 'REJECTED';
+
+export interface DocumentItem {
+  id: string;
+  name: string;
+  category: string;
+  mimeType: string;
+  size: number;
+  status: DocumentStatus;
+  createdAt: string;
+  updatedAt: string;
+  uploadedById: string | null;
+  employeeId: string | null;
+  folderId: string | null;
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeCode: string;
+    department: Named | null;
+  } | null;
+  folder: { id: string; name: string; visibility: 'EVERYONE' | 'HR' } | null;
+}
+
+export interface DocumentFolders {
+  all: number;
+  employeeFiles: number;
+  byDepartment: { id: string | null; name: string; count: number }[];
+  folders: { id: string; name: string; visibility: 'EVERYONE' | 'HR'; count: number }[];
+  canManage: boolean;
+  selfEmployeeId: string | null;
+}
+
+/** Uploads one file to an employee or a company folder. */
+export function uploadDocument(
+  file: Blob,
+  fileName: string,
+  target: { employeeId?: string; folderId?: string },
+  category: string,
+) {
+  const form = new FormData();
+  if (target.employeeId) form.set('employeeId', target.employeeId);
+  if (target.folderId) form.set('folderId', target.folderId);
+  form.set('category', category);
+  form.set('file', file, fileName);
+  return api<DocumentItem>('/documents', { method: 'POST', body: form });
 }

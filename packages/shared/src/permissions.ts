@@ -14,6 +14,8 @@ export const PERMISSIONS = {
   'employee.read': 'See full records of every employee',
   'employee.manage': 'Add and edit employee records and invite people to sign in',
   'employee.sensitive.read': 'See unmasked PAN, Aadhaar, UAN, ESIC and bank details',
+  'document.read': "See every employee's documents and HR-only folders",
+  'document.manage': 'Upload, verify and delete any document; manage folders',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -42,6 +44,8 @@ export const SYSTEM_ROLES: Record<
       'employee.read',
       'employee.manage',
       'employee.sensitive.read',
+      'document.read',
+      'document.manage',
       'audit.read',
     ],
   },

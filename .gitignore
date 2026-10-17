@@ -9,3 +9,6 @@ coverage/
 !.env.example
 next-env.d.ts
 .DS_Store
+
+/storage/
+apps/api/storage/

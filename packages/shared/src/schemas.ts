@@ -287,3 +287,86 @@ export const SENSITIVE_PROFILE_FIELDS = [
   'bankAccountNumber',
 ] as const;
 export type SensitiveProfileField = (typeof SENSITIVE_PROFILE_FIELDS)[number];
+
+// ---------- Documents ----------
+
+export const DOCUMENT_STATUSES = [
+  'PROCESSING',
+  'NEEDS_REVIEW',
+  'VERIFIED',
+  'SIGNED',
+  'ISSUED',
+  'REJECTED',
+] as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+
+/** Kinds of document HR keeps per employee; free text is allowed too. */
+export const DOCUMENT_CATEGORIES = [
+  'Aadhaar card',
+  'PAN card',
+  'Passport',
+  'Offer letter',
+  'Appointment letter',
+  'Relieving letter',
+  'Experience letter',
+  'Degree certificate',
+  'Payslip',
+  'Form 16',
+  'Bank proof',
+  'Policy',
+  'Contract',
+  'Other',
+] as const;
+
+/** Files the API accepts, by MIME type, with the extension each must carry. */
+export const DOCUMENT_MIME_TYPES: Record<string, string[]> = {
+  'application/pdf': ['pdf'],
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/webp': ['webp'],
+  'application/msword': ['doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['docx'],
+  'application/vnd.ms-excel': ['xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['xlsx'],
+  'text/csv': ['csv'],
+};
+
+export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
+
+/** Form fields sent with an upload (the file itself is the `file` part). */
+export const uploadDocumentSchema = z
+  .object({
+    employeeId: z.string().uuid().optional(),
+    folderId: z.string().uuid().optional(),
+    category: z.string().trim().min(1).max(60).default('Other'),
+    name: z.string().trim().min(1).max(160).optional(),
+  })
+  .refine((v) => Boolean(v.employeeId) !== Boolean(v.folderId), {
+    message: 'Choose either an employee or a folder',
+    path: ['employeeId'],
+  });
+export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
+
+export const listDocumentsQuerySchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  folderId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+  search: z.string().trim().max(100).optional(),
+  status: z.enum(DOCUMENT_STATUSES).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
+
+export const updateDocumentSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+  category: z.string().trim().min(1).max(60).optional(),
+  status: z.enum(DOCUMENT_STATUSES).optional(),
+});
+export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;
+
+export const createFolderSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  visibility: z.enum(['EVERYONE', 'HR']).default('HR'),
+});
+export type CreateFolderInput = z.infer<typeof createFolderSchema>;

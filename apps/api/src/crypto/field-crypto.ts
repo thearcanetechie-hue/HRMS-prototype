@@ -48,6 +48,33 @@ export class FieldCrypto {
     ]).toString('utf8');
   }
 
+  /**
+   * Encrypts file contents (documents) with the same per-workspace key. `label` is bound in
+   * as additional data (the document id), so a stored file can't be swapped for another.
+   * Output layout: IV | auth tag | ciphertext.
+   */
+  encryptBytes(tenantId: string, label: string, data: Buffer): Buffer {
+    const iv = randomBytes(IV_BYTES);
+    const cipher = createCipheriv('aes-256-gcm', this.keyFor(tenantId), iv);
+    cipher.setAAD(Buffer.from(`${tenantId}:file:${label}`));
+    const ct = Buffer.concat([cipher.update(data), cipher.final()]);
+    return Buffer.concat([iv, cipher.getAuthTag(), ct]);
+  }
+
+  decryptBytes(tenantId: string, label: string, stored: Buffer): Buffer {
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      this.keyFor(tenantId),
+      stored.subarray(0, IV_BYTES),
+    );
+    decipher.setAAD(Buffer.from(`${tenantId}:file:${label}`));
+    decipher.setAuthTag(stored.subarray(IV_BYTES, IV_BYTES + TAG_BYTES));
+    return Buffer.concat([
+      decipher.update(stored.subarray(IV_BYTES + TAG_BYTES)),
+      decipher.final(),
+    ]);
+  }
+
   private keyFor(tenantId: string): Buffer {
     let key = this.keys.get(tenantId);
     if (!key) {
