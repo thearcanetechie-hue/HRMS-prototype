@@ -6,6 +6,19 @@ interactive, `class-variance-authority` for variants, `lucide-react` for icons).
 
 Open `/design` in the running app to see every piece in the current theme.
 
+## Brand colours
+
+These five colours are the HRMS brand. Use them everywhere the product shows up: the app,
+Figma, Canva, decks, the website and documents.
+
+| Name           | Hex       | Where it's used                                                                      |
+| -------------- | --------- | ------------------------------------------------------------------------------------ |
+| Crimson Depth  | `#710014` | Light-mode accent: main buttons, active items, today                                 |
+| Antique Gold   | `#C28D39` | Dark-mode accent: main buttons with a soft gold glow                                 |
+| Warm Sand      | `#B38F6F` | Small details such as eyebrows (darkened to `#86664A` for text on light backgrounds) |
+| Soft Pearl     | `#F2F1ED` | Light-mode background; text colour in dark mode                                      |
+| Obsidian Black | `#161616` | Dark-mode background; text colour in light mode                                      |
+
 ## Themes
 
 |         | Light                                     | Dark                                           |
