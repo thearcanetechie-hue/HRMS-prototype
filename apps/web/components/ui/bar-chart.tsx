@@ -14,7 +14,7 @@ export function BarChart({
   label,
   className,
 }: {
-  data: { label: string; value: number }[];
+  data: { label: string; value: number; key?: string }[];
   highlight?: string;
   max?: number;
   height?: number;
@@ -31,9 +31,12 @@ export function BarChart({
       </figcaption>
       <div aria-hidden="true" className="flex items-end gap-2 sm:gap-3" style={{ height }}>
         {data.map((d) => {
-          const on = d.label === highlight;
+          const on = (d.key ?? d.label) === highlight;
           return (
-            <div key={d.label} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-1.5">
+            <div
+              key={d.key ?? d.label}
+              className="flex h-full min-w-0 flex-1 flex-col justify-end gap-1.5"
+            >
               {showValues && (
                 <span
                   className={cn(
@@ -60,10 +63,10 @@ export function BarChart({
       <div aria-hidden="true" className="mt-2 flex gap-2 sm:gap-3">
         {data.map((d) => (
           <span
-            key={d.label}
+            key={d.key ?? d.label}
             className={cn(
               'min-w-0 flex-1 truncate text-center text-[11.5px] font-semibold',
-              d.label === highlight ? 'text-foreground' : 'text-muted-foreground',
+              (d.key ?? d.label) === highlight ? 'text-foreground' : 'text-muted-foreground',
             )}
           >
             {d.label}
