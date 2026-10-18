@@ -147,6 +147,11 @@
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
   }
+  /* Grid children may shrink below their content (wide tables scroll inside their card instead
+     of stretching the page on phones). */
+  .grid > * {
+    min-width: 0;
+  }
   input[type='date']::-webkit-calendar-picker-indicator {
     @apply opacity-60 dark:invert;
   }

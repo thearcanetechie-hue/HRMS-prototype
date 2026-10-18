@@ -58,8 +58,13 @@ export default function LoginPage() {
           </div>
           <div className="flex items-center gap-3 text-[13.5px]">
             <span className="hidden text-muted-foreground sm:inline">New to HRMS?</span>
-            <Link href="/signup" className="inline-flex items-center gap-1 font-bold">
-              Create a workspace <ArrowRight className="size-4" />
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-1 font-bold whitespace-nowrap"
+            >
+              <span className="sm:hidden">Sign up</span>
+              <span className="hidden sm:inline">Create a workspace</span>
+              <ArrowRight className="size-4" />
             </Link>
             <ThemeToggle />
           </div>
