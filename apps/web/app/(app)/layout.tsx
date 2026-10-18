@@ -12,6 +12,7 @@ import {
   Heart,
   Inbox,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Menu as MenuIcon,
   Network,
@@ -54,6 +55,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/dashboard', label: 'Home', icon: LayoutDashboard, show: always },
       { href: '/attendance', label: 'Attendance & leave', icon: Clock, show: always },
       { href: '/employees', label: 'Employees', icon: Users, show: isHr },
+      { href: '/lifecycle', label: 'On/offboarding', icon: ListChecks, show: always },
       {
         href: '/employees',
         label: 'Directory',

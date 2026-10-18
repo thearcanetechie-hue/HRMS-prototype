@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityLog } from './activity-log';
+import { ProfileChecklistCard } from './checklists';
 import { EmployeeDocumentsCard } from './documents';
 import { InviteButton } from './invite-button';
 import { ProfileForm } from './profile-form';
@@ -31,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import type { Employee, IdentifierKey, Profile } from '@/lib/api';
 import { getProfileExtras, type ProfileExtras } from '@/lib/demo/profile';
 import { formatDate, initials, inr, STATUS_TONE, titleCase } from '@/lib/format';
+import { useSession } from '@/lib/session';
 
 type KV = [string, ReactNode];
 
@@ -77,6 +79,7 @@ export function EmployeeProfileView({
   onProfileSaved: (p: Profile) => void;
   self?: boolean;
 }) {
+  const { can } = useSession();
   const [extras, setExtras] = useState<ProfileExtras | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -383,6 +386,7 @@ export function EmployeeProfileView({
               {statutoryCard}
             </div>
             <div className="grid content-start gap-5">
+              <ProfileChecklistCard employee={employee} canManage={can('lifecycle.manage')} />
               {attendanceCard}
               {leaveCard}
               {documentsCard}
