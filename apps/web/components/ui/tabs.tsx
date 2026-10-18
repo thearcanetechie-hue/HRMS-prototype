@@ -4,7 +4,10 @@ import * as TabsPrimitive from '@radix-ui/react-tabs';
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
-export const Tabs = TabsPrimitive.Root;
+/** Never wider than its container: on phones the tab list scrolls sideways instead. */
+export function Tabs({ className, ...props }: ComponentProps<typeof TabsPrimitive.Root>) {
+  return <TabsPrimitive.Root className={cn('min-w-0 max-w-full', className)} {...props} />;
+}
 export const TabsContent = TabsPrimitive.Content;
 
 /** Segmented control: a pressed-in track with the active tab raised. */
