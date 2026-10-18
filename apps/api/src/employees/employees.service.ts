@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { CreateEmployeeInput, ListEmployeesQuery, UpdateEmployeeInput } from '@hrms/shared';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { EmployeeAccess } from './employee-access.service';
 import { requireTenantId } from '../common/request-context';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,6 +36,7 @@ export class EmployeesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly access: EmployeeAccess,
+    private readonly lifecycle: LifecycleService,
   ) {}
 
   /** Full records for `employee.read`; otherwise the directory, which leaves out people who have left. */
@@ -122,6 +124,9 @@ export class EmployeesService {
     await this.audit.record('employee.created', 'Employee', employee.id, {
       employeeCode: employee.employeeCode,
     });
+    // New joiners get the default onboarding checklist straight away.
+    if (employee.status === 'ONBOARDING')
+      await this.lifecycle.start(employee.id, { kind: 'ONBOARDING' }, { quiet: true });
     return employee;
   }
 

@@ -185,3 +185,61 @@ export function uploadDocument(
   form.set('file', file, fileName);
   return api<DocumentItem>('/documents', { method: 'POST', body: form });
 }
+
+export type ChecklistKind = 'ONBOARDING' | 'OFFBOARDING';
+export type TaskAssignee = 'HR' | 'MANAGER' | 'EMPLOYEE' | 'IT';
+
+export interface ChecklistTask {
+  id: string;
+  checklistId: string;
+  position: number;
+  title: string;
+  description: string | null;
+  assignee: TaskAssignee;
+  dueDate: string;
+  documentCategory: string | null;
+  doneAt: string | null;
+  doneBy: string | null;
+  note: string | null;
+  overdue: boolean;
+  canTick: boolean;
+}
+
+export interface Checklist {
+  id: string;
+  kind: ChecklistKind;
+  status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
+  startDate: string;
+  reason: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  canManage: boolean;
+  progress: { done: number; total: number };
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeCode: string;
+    managerId: string | null;
+    status: Employee['status'];
+    department: Named | null;
+    designation: Named | null;
+  };
+  tasks: ChecklistTask[];
+}
+
+export interface TemplateTask {
+  title: string;
+  description?: string | null;
+  assignee: TaskAssignee;
+  dueOffsetDays: number;
+  documentCategory?: string | null;
+}
+
+export interface ChecklistTemplate {
+  id: string;
+  name: string;
+  kind: ChecklistKind;
+  isDefault: boolean;
+  tasks: TemplateTask[];
+}

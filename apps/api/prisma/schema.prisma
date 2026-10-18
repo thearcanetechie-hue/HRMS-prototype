@@ -73,6 +73,8 @@ model Tenant {
   auditLogs     AuditLog[]
   documents     Document[]
   folders       DocumentFolder[]
+  checklistTemplates ChecklistTemplate[]
+  checklists    EmployeeChecklist[]
 }
 
 model User {
@@ -240,6 +242,7 @@ model Employee {
   reports     Employee[]       @relation("Reports")
   profile     EmployeeProfile?
   documents   Document[]
+  checklists  EmployeeChecklist[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -380,4 +383,85 @@ model Document {
   @@index([tenantId, employeeId])
   @@index([tenantId, folderId])
   @@index([tenantId, createdAt])
+}
+
+enum ChecklistKind {
+  ONBOARDING
+  OFFBOARDING
+}
+
+enum ChecklistStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskAssignee {
+  HR
+  MANAGER
+  EMPLOYEE
+  IT
+}
+
+/// A reusable list of joining or exit tasks. HR edits these without code; one per kind is the default.
+model ChecklistTemplate {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @db.Uuid
+  name      String
+  kind      ChecklistKind
+  isDefault Boolean       @default(false)
+  /// [{ title, description, assignee, dueOffsetDays, documentCategory }] in order.
+  tasks     Json          @default("[]")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checklists EmployeeChecklist[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, kind])
+}
+
+/// One person's onboarding or offboarding run, copied from a template so later template edits
+/// don't change checklists already under way.
+model EmployeeChecklist {
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @db.Uuid
+  employeeId  String          @db.Uuid
+  templateId  String?         @db.Uuid
+  kind        ChecklistKind
+  status      ChecklistStatus @default(OPEN)
+  /// Joining date for onboarding, last working day for offboarding. Task due dates count from it.
+  startDate   DateTime        @db.Date
+  reason      String?
+  createdById String?         @db.Uuid
+  createdAt   DateTime        @default(now())
+  completedAt DateTime?
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  template ChecklistTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  tasks    ChecklistTask[]
+
+  @@index([tenantId, status, kind])
+  @@index([tenantId, employeeId])
+}
+
+model ChecklistTask {
+  id               String       @id @default(uuid()) @db.Uuid
+  tenantId         String       @db.Uuid
+  checklistId      String       @db.Uuid
+  position         Int
+  title            String
+  description      String?
+  assignee         TaskAssignee
+  dueDate          DateTime     @db.Date
+  documentCategory String?
+  doneAt           DateTime?
+  doneById         String?      @db.Uuid
+  note             String?
+
+  checklist EmployeeChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, checklistId])
 }
