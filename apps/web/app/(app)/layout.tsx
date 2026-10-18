@@ -11,6 +11,7 @@ import {
   GraduationCap,
   Heart,
   Inbox,
+  Laptop,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -56,6 +57,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/attendance', label: 'Attendance & leave', icon: Clock, show: always },
       { href: '/employees', label: 'Employees', icon: Users, show: isHr },
       { href: '/lifecycle', label: 'On/offboarding', icon: ListChecks, show: always },
+      { href: '/assets', label: 'Assets', icon: Laptop, show: isHr },
       {
         href: '/employees',
         label: 'Directory',

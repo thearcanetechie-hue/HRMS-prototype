@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityLog } from './activity-log';
+import { ProfileAssetsCard } from './assets';
 import { ProfileChecklistCard } from './checklists';
 import { EmployeeDocumentsCard } from './documents';
 import { InviteButton } from './invite-button';
@@ -387,6 +388,11 @@ export function EmployeeProfileView({
             </div>
             <div className="grid content-start gap-5">
               <ProfileChecklistCard employee={employee} canManage={can('lifecycle.manage')} />
+              <ProfileAssetsCard
+                employeeId={employee.id}
+                name={`${employee.firstName} ${employee.lastName}`.trim()}
+                canManage={can('employee.manage')}
+              />
               {attendanceCard}
               {leaveCard}
               {documentsCard}
