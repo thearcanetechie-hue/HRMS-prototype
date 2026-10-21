@@ -76,7 +76,18 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Money',
     items: [
-      { href: '/payroll', label: 'Payroll & compliance', icon: Wallet, show: isHr },
+      {
+        href: '/payroll',
+        label: 'Payroll & compliance',
+        icon: Wallet,
+        show: (can) => can('payroll.manage'),
+      },
+      {
+        href: '/payroll',
+        label: 'My payslips',
+        icon: Wallet,
+        show: (can, e) => !can('payroll.manage') && e,
+      },
       { href: '/claims', label: 'Overtime & claims', icon: Receipt, show: always },
     ],
   },

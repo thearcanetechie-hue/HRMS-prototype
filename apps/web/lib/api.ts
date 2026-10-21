@@ -437,3 +437,88 @@ export interface ClaimsSummary {
   canManage: boolean;
   selfEmployeeId: string | null;
 }
+
+export interface SalaryInfo {
+  id: string;
+  annualCtc: number;
+  basicPercent: number;
+  metro: boolean;
+  effectiveFrom: string;
+  monthlyGross: number;
+}
+
+export interface PayslipFlag {
+  tag: string;
+  reason: string;
+  tone: 'warning' | 'danger' | 'accent' | 'info';
+}
+
+export interface PayslipData {
+  id: string;
+  runId: string;
+  month: string;
+  runStatus: 'DRAFT' | 'LOCKED' | 'PAID';
+  company?: string;
+  employee: {
+    id: string;
+    name: string;
+    firstName: string;
+    lastName: string;
+    employeeCode: string;
+    department: string | null;
+    designation: string | null;
+    location: string | null;
+  };
+  lines: {
+    key: string;
+    label: string;
+    amount: number;
+    kind: 'earning' | 'deduction' | 'employer';
+  }[];
+  gross: number;
+  deductions: number;
+  net: number;
+  pf: number;
+  esi: number;
+  pt: number;
+  tds: number;
+  employerPf: number;
+  employerEsi: number;
+  reimbursements: number;
+  payableDays: number;
+  daysInMonth: number;
+  lopDays: number;
+  overtimeHours: number;
+  flags: PayslipFlag[];
+  reviewed: boolean;
+}
+
+export interface PayrollRunData {
+  id: string;
+  month: string;
+  status: 'DRAFT' | 'LOCKED' | 'PAID';
+  gross: number;
+  net: number;
+  statutory: number;
+  ctc: number;
+  lockedAt: string | null;
+  paidAt: string | null;
+  payslips: PayslipData[];
+  pendingOvertime: number;
+  pendingClaims: number;
+  flagged: number;
+  unreviewed: number;
+  split: { net: number; tds: number; pf: number; esiPt: number; reimbursements: number };
+}
+
+export interface ComplianceItem {
+  key: string;
+  name: string;
+  period: string;
+  due: string;
+  amount: number | null;
+  dueInDays: number;
+  status: 'open' | 'soon' | 'overdue' | 'filed';
+  filedAt: string | null;
+  reference: string | null;
+}

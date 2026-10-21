@@ -1,21 +1,14 @@
 import { demoDelay } from '@/lib/format';
 
 /**
- * The parts of a person's page that belong to modules not built yet (pay and performance).
+ * The part of a person's page that belongs to a module not built yet (performance).
  * Attendance, leave, documents, assets and the timeline already come from the API.
  */
 export type ProfileExtras = {
-  pay: { ctc: number; payGroup: string; shift: string; noticeDays: number };
   performance: { cycle: string; rating: string; goals: { title: string; pct: number }[] };
 };
 
 const extras: ProfileExtras = {
-  pay: {
-    ctc: 1850000,
-    payGroup: 'Bengaluru · monthly',
-    shift: 'General · 09:30 – 18:30',
-    noticeDays: 60,
-  },
   performance: {
     cycle: 'H1 2026 review',
     rating: 'Exceeds',
