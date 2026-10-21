@@ -643,3 +643,28 @@ export const claimCategorySchema = z.object({
   active: z.boolean().default(true),
 });
 export type ClaimCategoryInput = z.infer<typeof claimCategorySchema>;
+
+// ---------- Payroll ----------
+
+export const salaryStructureSchema = z.object({
+  /** Yearly cost to company in whole rupees. */
+  annualCtc: z.number().int().min(10_000).max(10_00_00_000),
+  /** Basic as a percentage of gross, usually 40–50. */
+  basicPercent: z.number().int().min(30).max(80).default(50),
+  /** HRA at 50% of basic for Mumbai, Delhi, Kolkata and Chennai; 40% elsewhere. */
+  metro: z.boolean().default(false),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-01'),
+});
+export type SalaryStructureInput = z.infer<typeof salaryStructureSchema>;
+
+export const createPayrollRunSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'Use a month like 2026-10'),
+});
+export type CreatePayrollRunInput = z.infer<typeof createPayrollRunSchema>;
+
+export const markFiledSchema = z.object({
+  key: z.string().trim().min(1).max(40),
+  period: z.string().trim().min(1).max(20),
+  reference: z.string().trim().max(80).nullish(),
+});
+export type MarkFiledInput = z.infer<typeof markFiledSchema>;
