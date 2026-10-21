@@ -18,6 +18,8 @@ export const PERMISSIONS = {
   'document.manage': 'Upload, verify and delete any document; manage folders',
   'lifecycle.manage':
     'Start onboarding and offboarding, edit checklist templates and tick off any task',
+  'attendance.manage':
+    'Mark attendance for anyone, decide any leave request and set up leave types',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -49,6 +51,7 @@ export const SYSTEM_ROLES: Record<
       'document.read',
       'document.manage',
       'lifecycle.manage',
+      'attendance.manage',
       'audit.read',
     ],
   },

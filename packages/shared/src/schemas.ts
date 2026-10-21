@@ -439,3 +439,92 @@ export const addTaskSchema = templateTaskSchema
   .omit({ dueOffsetDays: true })
   .extend({ dueDate: isoDate.optional() });
 export type AddTaskInput = z.infer<typeof addTaskSchema>;
+
+// ---------- Attendance and leave ----------
+
+/** Day codes on the register. Leave types add their own codes (PL, SL, FV…). */
+export const ATTENDANCE_MARKS = ['P', 'A', 'HD'] as const;
+export type AttendanceMark = (typeof ATTENDANCE_MARKS)[number];
+
+export const TONES = ['primary', 'detail', 'success', 'warning', 'danger', 'info'] as const;
+
+export const leaveTypeSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{1,4}$/, 'Use 1 to 4 letters, like PL'),
+  tone: z.enum(TONES).default('info'),
+  /** null means no limit. */
+  daysPerYear: z.number().int().min(0).max(366).nullable().default(null),
+  accrual: z.enum(['YEARLY', 'MONTHLY']).default('YEARLY'),
+  carryForward: z.number().int().min(0).max(366).default(0),
+  /** Ask for a document when a request is longer than this many days. */
+  documentAfterDays: z.number().int().min(1).max(366).nullable().default(null),
+  paid: z.boolean().default(true),
+  approver: z.enum(['MANAGER', 'HR']).default('MANAGER'),
+  /** Field visits and work from home count as present on the register. */
+  countsAsPresent: z.boolean().default(false),
+  active: z.boolean().default(true),
+});
+export type LeaveTypeInput = z.infer<typeof leaveTypeSchema>;
+export const updateLeaveTypeSchema = leaveTypeSchema.partial();
+export type UpdateLeaveTypeInput = z.infer<typeof updateLeaveTypeSchema>;
+
+const day = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-21')
+  .refine((v) => !Number.isNaN(Date.parse(v)), 'Enter a real date');
+
+export const createLeaveRequestSchema = z
+  .object({
+    /** HR can apply on someone's behalf; otherwise it's for the caller. */
+    employeeId: z.string().uuid().optional(),
+    leaveTypeId: z.string().uuid(),
+    startDate: day,
+    endDate: day,
+    halfDay: z.boolean().default(false),
+    reason: z.string().trim().max(500).nullish(),
+  })
+  .refine((v) => v.endDate >= v.startDate, {
+    message: 'The end date is before the start date',
+    path: ['endDate'],
+  })
+  .refine((v) => !v.halfDay || v.startDate === v.endDate, {
+    message: 'A half day is a single day',
+    path: ['halfDay'],
+  });
+export type CreateLeaveRequestInput = z.infer<typeof createLeaveRequestSchema>;
+
+export const decideLeaveSchema = z.object({
+  decision: z.enum(['APPROVE', 'REJECT']),
+  note: z.string().trim().max(500).nullish(),
+});
+export type DecideLeaveInput = z.infer<typeof decideLeaveSchema>;
+
+export const listLeaveQuerySchema = z.object({
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']).optional(),
+  employeeId: z.string().uuid().optional(),
+  /** Only requests the caller can decide. */
+  toDecide: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+});
+export type ListLeaveQuery = z.infer<typeof listLeaveQuerySchema>;
+
+export const registerQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'Use a month like 2026-10'),
+  departmentId: z.string().uuid().optional(),
+});
+export type RegisterQuery = z.infer<typeof registerQuerySchema>;
+
+export const markAttendanceSchema = z.object({
+  employeeId: z.string().uuid(),
+  date: day,
+  /** P, A or HD, or a leave type code to record a one-day approved leave. */
+  code: z.string().trim().toUpperCase().min(1).max(4),
+  note: z.string().trim().max(300).nullish(),
+});
+export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;

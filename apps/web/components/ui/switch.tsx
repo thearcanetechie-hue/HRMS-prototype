@@ -8,12 +8,13 @@ export function Switch({ className, ...props }: ComponentProps<typeof SwitchPrim
   return (
     <SwitchPrimitive.Root
       className={cn(
-        'relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full bg-surface-2 shadow-inset-sm transition-colors data-[state=checked]:bg-primary-soft/70 disabled:opacity-50',
+        // Off: a grey track and grey knob, so it reads clearly on any card in both themes.
+        'relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full bg-muted-foreground/25 shadow-inset-sm transition-colors data-[state=checked]:bg-primary-soft/70 disabled:opacity-50',
         className,
       )}
       {...props}
     >
-      <SwitchPrimitive.Thumb className="block size-5 translate-x-1 rounded-full bg-surface shadow-raised-sm transition-transform data-[state=checked]:translate-x-6" />
+      <SwitchPrimitive.Thumb className="block size-5 translate-x-1 rounded-full bg-muted-foreground shadow-raised-sm transition-all data-[state=checked]:translate-x-6 data-[state=checked]:bg-surface" />
     </SwitchPrimitive.Root>
   );
 }

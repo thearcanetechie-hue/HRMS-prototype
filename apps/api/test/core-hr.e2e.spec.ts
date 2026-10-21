@@ -296,7 +296,9 @@ describe('Core HR', () => {
       const a = crypto.encrypt(tenantA, 'pan', 'ABCDE1234F');
       expect(() => crypto.decrypt(tenantB, 'pan', a)).toThrow();
       expect(() => crypto.decrypt(tenantA, 'aadhaar', a)).toThrow();
-      const tampered = a.slice(0, -2) + (a.endsWith('A') ? 'B' : 'A') + a.slice(-1);
+      // Flip a character well inside the payload: the last base64 character can carry unused
+      // padding bits, so changing it does not always change the bytes.
+      const tampered = a.slice(0, 12) + (a[12] === 'A' ? 'B' : 'A') + a.slice(13);
       expect(() => crypto.decrypt(tenantA, 'pan', tampered)).toThrow();
     });
   });

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import type { NextFunction, Request, Response } from 'express';
+import { AttendanceModule } from './attendance/attendance.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
@@ -29,6 +30,7 @@ import { RolesModule } from './roles/roles.module';
     EmployeesModule,
     RolesModule,
     DocumentsModule,
+    AttendanceModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -243,3 +243,97 @@ export interface ChecklistTemplate {
   isDefault: boolean;
   tasks: TemplateTask[];
 }
+
+export type Tone6 = 'primary' | 'detail' | 'success' | 'warning' | 'danger' | 'info';
+
+export interface LeaveType {
+  id: string;
+  name: string;
+  code: string;
+  tone: Tone6;
+  daysPerYear: number | null;
+  accrual: 'YEARLY' | 'MONTHLY';
+  carryForward: number;
+  documentAfterDays: number | null;
+  paid: boolean;
+  approver: 'MANAGER' | 'HR';
+  countsAsPresent: boolean;
+  active: boolean;
+}
+
+export interface RegisterCell {
+  code: string;
+  late?: boolean;
+  halfDay?: boolean;
+}
+
+export interface AttendanceRegister {
+  month: string;
+  days: string[];
+  today: string;
+  canMark: boolean;
+  leaveTypes: Pick<LeaveType, 'id' | 'code' | 'name' | 'tone' | 'countsAsPresent' | 'active'>[];
+  rows: {
+    employee: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      employeeCode: string;
+      department: Named | null;
+    };
+    cells: RegisterCell[];
+    present: number;
+    workingDays: number;
+  }[];
+}
+
+export interface AttendanceToday {
+  date: string;
+  weekend: boolean;
+  headcount: number;
+  present: number;
+  late: number;
+  absent: number;
+  onLeave: number;
+  field: number;
+  notMarked: number;
+  me: {
+    employeeId: string;
+    checkIn: string | null;
+    checkOut: string | null;
+    status: string | null;
+  } | null;
+}
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  halfDay: boolean;
+  days: number;
+  reason: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  decisionNote: string | null;
+  createdAt: string;
+  canDecide: boolean;
+  canCancel: boolean;
+  needsDocument?: boolean;
+  leaveType: { id: string; name: string; code: string; tone: Tone6; approver: 'MANAGER' | 'HR' };
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeCode: string;
+    department: Named | null;
+  };
+}
+
+export interface LeaveBalance {
+  leaveType: { id: string; name: string; code: string; tone: Tone6 };
+  entitled: number | null;
+  total: number | null;
+  used: number;
+  pending: number;
+  left: number | null;
+}
