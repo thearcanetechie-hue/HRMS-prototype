@@ -23,16 +23,24 @@ import { EmployeeDocumentsCard } from './documents';
 import { EmployeeAttendanceCard, EmployeeLeaveCard } from './person-cards';
 import { InviteButton } from './invite-button';
 import { ProfileForm } from './profile-form';
-import { Badge } from './ui/badge';
+import { Badge, type BadgeTone } from './ui/badge';
 import { Button } from './ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Dialog, DialogContent } from './ui/dialog';
-import { DemoBadge, IconTile } from './ui/page';
+import { IconTile } from './ui/page';
 import { ProgressBar, Skeleton } from './ui/progress';
 import { ProgressRing } from './ui/progress-ring';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { api, type Employee, type IdentifierKey, type Profile, type SalaryInfo } from '@/lib/api';
-import { getProfileExtras, type ProfileExtras } from '@/lib/demo/profile';
+import {
+  api,
+  type Employee,
+  type GoalItem,
+  type IdentifierKey,
+  type Profile,
+  type ReviewItem,
+  type ReviewsData,
+  type SalaryInfo,
+} from '@/lib/api';
 import { formatDate, initials, inr, STATUS_TONE, titleCase } from '@/lib/format';
 import { useSession } from '@/lib/session';
 
@@ -64,7 +72,7 @@ const address = (a: Profile['currentAddress']) =>
 
 /**
  * A person's page (screen 09). Used for /employees/[id] and for /profile (self view).
- * Job and identity data are real; attendance, leave, documents and performance are demo.
+ * Everything on this page comes from the API.
  */
 export function EmployeeProfileView({
   employee,
@@ -82,7 +90,6 @@ export function EmployeeProfileView({
   self?: boolean;
 }) {
   const { can } = useSession();
-  const [extras, setExtras] = useState<ProfileExtras | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [editing, setEditing] = useState(false);
   const name = `${employee.firstName} ${employee.lastName}`.trim();
@@ -90,7 +97,6 @@ export function EmployeeProfileView({
   const [salary, setSalary] = useState<SalaryInfo | null>(null);
 
   useEffect(() => {
-    getProfileExtras(employee.id).then(setExtras);
     // Salary is shown to the person and to payroll; for anyone else the request is refused.
     if (self || can('payroll.manage'))
       api<{ current: SalaryInfo | null }>(`/payroll/salaries/${employee.id}`)
@@ -229,28 +235,7 @@ export function EmployeeProfileView({
 
   const documentsCard = <EmployeeDocumentsCard employeeId={employee.id} self={self} />;
 
-  const performanceCard = extras && (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Performance</CardTitle>
-          <CardDescription>{extras.performance.cycle}</CardDescription>
-        </div>
-        <Badge tone="success">{extras.performance.rating}</Badge>
-      </CardHeader>
-      <ul className="grid gap-3.5">
-        {extras.performance.goals.map((g) => (
-          <li key={g.title} className="grid gap-1.5">
-            <div className="flex justify-between gap-2">
-              <span className="font-semibold">{g.title}</span>
-              <span className="font-mono text-[13px] text-muted-foreground">{g.pct}%</span>
-            </div>
-            <ProgressBar value={g.pct} tone={g.pct >= 100 ? 'success' : 'primary'} />
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
+  const performanceCard = <EmployeePerformanceCard employeeId={employee.id} />;
 
   return (
     <>
@@ -395,5 +380,63 @@ export function ProfileSkeleton() {
         <Skeleton className="h-80 rounded-2xl" />
       </div>
     </div>
+  );
+}
+
+const STAGE_LABEL: Record<ReviewItem['stage'], [string, BadgeTone]> = {
+  SELF: ['Self review due', 'warning'],
+  MANAGER: ['Manager review due', 'accent'],
+  CALIBRATION: ['In calibration', 'info'],
+  SHARED: ['Shared', 'success'],
+};
+const RATING_LABEL = ['', 'Needs improvement', 'Developing', 'Meets', 'Exceeds', 'Outstanding'];
+
+function EmployeePerformanceCard({ employeeId }: { employeeId: string }) {
+  const [goals, setGoals] = useState<GoalItem[] | null>(null);
+  const [review, setReview] = useState<{ cycle: string; item: ReviewItem } | null>(null);
+  useEffect(() => {
+    api<GoalItem[]>(`/performance/goals?ownerId=${employeeId}`)
+      .then((g) => setGoals(g.filter((x) => x.scope !== 'COMPANY')))
+      .catch(() => setGoals([]));
+    api<ReviewsData>('/performance/reviews')
+      .then((r) => {
+        const item = r.reviews.find((x) => x.employee.id === employeeId);
+        setReview(r.cycle && item ? { cycle: r.cycle.name, item } : null);
+      })
+      .catch(() => undefined);
+  }, [employeeId]);
+
+  const stage = review ? STAGE_LABEL[review.item.stage] : null;
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Performance</CardTitle>
+          <CardDescription>{review ? review.cycle : 'Goals'}</CardDescription>
+        </div>
+        {review?.item.finalRating ? (
+          <Badge tone="success">{RATING_LABEL[review.item.finalRating]}</Badge>
+        ) : (
+          stage && <Badge tone={stage[1]}>{stage[0]}</Badge>
+        )}
+      </CardHeader>
+      {!goals ? (
+        <Skeleton className="h-24" />
+      ) : goals.length ? (
+        <ul className="grid gap-3.5">
+          {goals.map((g) => (
+            <li key={g.id} className="grid gap-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="font-semibold">{g.title}</span>
+                <span className="font-mono text-[13px] text-muted-foreground">{g.progress}%</span>
+              </div>
+              <ProgressBar value={g.progress} tone={g.progress >= 100 ? 'success' : 'primary'} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">No goals set yet.</p>
+      )}
+    </Card>
   );
 }

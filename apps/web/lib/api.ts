@@ -522,3 +522,83 @@ export interface ComplianceItem {
   filedAt: string | null;
   reference: string | null;
 }
+
+export interface PerfPerson {
+  id: string;
+  firstName: string;
+  lastName: string;
+  employeeCode: string;
+  department: { name: string } | null;
+}
+
+export interface GoalItem {
+  id: string;
+  ownerId: string;
+  title: string;
+  description: string | null;
+  scope: 'COMPANY' | 'TEAM' | 'PERSONAL';
+  dueDate: string;
+  progress: number;
+  status: 'ON_TRACK' | 'AT_RISK' | 'BEHIND' | 'DONE';
+  canEdit: boolean;
+  owner: PerfPerson;
+}
+
+export interface ReviewItem {
+  id: string;
+  cycleId: string;
+  stage: 'SELF' | 'MANAGER' | 'CALIBRATION' | 'SHARED';
+  employee: PerfPerson;
+  reviewer: PerfPerson | null;
+  selfRating: number | null;
+  selfComments: string | null;
+  managerRating: number | null;
+  managerComments: string | null;
+  finalRating: number | null;
+  canWriteSelf: boolean;
+  canWriteManager: boolean;
+  canShare: boolean;
+}
+
+export interface ReviewCycleInfo {
+  id: string;
+  name: string;
+  closesOn: string;
+  active: boolean;
+}
+
+export interface ReviewsData {
+  cycle: ReviewCycleInfo | null;
+  counts: {
+    total: number;
+    selfDone: number;
+    managerDone: number;
+    calibrated: number;
+    shared: number;
+  } | null;
+  reviews: ReviewItem[];
+}
+
+export interface PerformanceOverview {
+  goals: number;
+  goalsOnTrackPct: number | null;
+  goalsAtRisk: number;
+  cycle: ReviewCycleInfo | null;
+  counts: ReviewsData['counts'];
+  myReviewTodo: number;
+  kudosThisMonth: number;
+  canManage: boolean;
+  selfEmployeeId: string | null;
+}
+
+export interface KudosData {
+  recent: {
+    id: string;
+    value: string;
+    reason: string;
+    createdAt: string;
+    from: PerfPerson;
+    to: PerfPerson;
+  }[];
+  top: { employee: PerfPerson; count: number; latest: string }[];
+}
