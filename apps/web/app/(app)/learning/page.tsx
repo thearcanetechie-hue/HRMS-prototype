@@ -195,7 +195,11 @@ export default function LearningPage() {
             <TabsList>
               {FILTERS.map((f) => (
                 <TabsTrigger key={f} value={f}>
-                  {f === 'all' ? 'All courses' : f === 'mine' ? 'My courses' : titleCase(f)}
+                  {f === 'all'
+                    ? 'All courses'
+                    : f === 'mine'
+                      ? 'My courses'
+                      : titleCase(f.toUpperCase())}
                 </TabsTrigger>
               ))}
             </TabsList>
