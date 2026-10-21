@@ -78,6 +78,8 @@ model Tenant {
   leaveTypes    LeaveType[]
   leaveRequests LeaveRequest[]
   attendance    AttendanceRecord[]
+  assets        Asset[]
+  assetEvents   AssetEvent[]
 }
 
 model User {
@@ -248,6 +250,7 @@ model Employee {
   checklists  EmployeeChecklist[]
   leaveRequests LeaveRequest[]
   attendance  AttendanceRecord[]
+  assets      Asset[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -569,4 +572,70 @@ model AttendanceRecord {
 
   @@unique([employeeId, date])
   @@index([tenantId, date])
+}
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  DAMAGED
+}
+
+enum AssetStatus {
+  ASSIGNED
+  IN_STOCK
+  IN_REPAIR
+  RETIRED
+  LOST
+}
+
+/// Something the company owns and hands out: a laptop, phone, ID card…
+model Asset {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  /// Register number like AST-0007, assigned in order per workspace.
+  tag           String
+  name          String
+  category      String
+  serial        String
+  purchasedOn   DateTime?      @db.Date
+  cost          Int            @default(0)
+  warrantyUntil DateTime?      @db.Date
+  location      String?
+  condition     AssetCondition @default(NEW)
+  status        AssetStatus    @default(IN_STOCK)
+  /// Who holds it while ASSIGNED.
+  holderId      String?        @db.Uuid
+  /// When the current status started (assigned on, sent for repair on…).
+  since         DateTime?      @db.Date
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  holder Employee?    @relation(fields: [holderId], references: [id], onDelete: SetNull)
+  events AssetEvent[]
+
+  @@unique([tenantId, tag])
+  @@unique([tenantId, serial])
+  @@index([tenantId, status])
+  @@index([holderId])
+}
+
+/// What happened to an asset, newest first on screen.
+model AssetEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  assetId    String   @db.Uuid
+  /// added, assigned, returned, repair, in_stock, retired, lost, updated
+  kind       String
+  text       String
+  employeeId String?  @db.Uuid
+  byId       String?  @db.Uuid
+  at         DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assetId, at])
 }

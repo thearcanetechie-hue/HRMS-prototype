@@ -20,6 +20,7 @@ export const PERMISSIONS = {
     'Start onboarding and offboarding, edit checklist templates and tick off any task',
   'attendance.manage':
     'Mark attendance for anyone, decide any leave request and set up leave types',
+  'asset.manage': 'Keep the asset register: add, assign, take back, repair and retire assets',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -52,6 +53,7 @@ export const SYSTEM_ROLES: Record<
       'document.manage',
       'lifecycle.manage',
       'attendance.manage',
+      'asset.manage',
       'audit.read',
     ],
   },

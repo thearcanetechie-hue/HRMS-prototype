@@ -528,3 +528,66 @@ export const markAttendanceSchema = z.object({
   note: z.string().trim().max(300).nullish(),
 });
 export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
+
+// ---------- Assets ----------
+
+export const ASSET_CATEGORIES = [
+  'Laptop',
+  'Monitor',
+  'Phone',
+  'SIM card',
+  'ID card',
+  'Access card',
+  'Headset',
+  'Furniture',
+  'Vehicle',
+] as const;
+export const ASSET_CONDITIONS = ['NEW', 'GOOD', 'FAIR', 'DAMAGED'] as const;
+export const ASSET_STATUSES = ['ASSIGNED', 'IN_STOCK', 'IN_REPAIR', 'RETIRED', 'LOST'] as const;
+
+const optionalDay = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-21')
+  .nullish();
+
+export const createAssetSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  category: z.enum(ASSET_CATEGORIES),
+  serial: z.string().trim().min(1).max(80),
+  purchasedOn: optionalDay,
+  /** Rupees, whole. */
+  cost: z.number().int().min(0).max(1_00_00_00_000).default(0),
+  warrantyUntil: optionalDay,
+  location: z.string().trim().max(80).nullish(),
+  condition: z.enum(ASSET_CONDITIONS).default('NEW'),
+  notes: z.string().trim().max(500).nullish(),
+});
+export type CreateAssetInput = z.infer<typeof createAssetSchema>;
+export const updateAssetSchema = createAssetSchema.partial();
+export type UpdateAssetInput = z.infer<typeof updateAssetSchema>;
+
+export const listAssetsQuerySchema = z.object({
+  status: z.enum(ASSET_STATUSES).optional(),
+  category: z.enum(ASSET_CATEGORIES).optional(),
+  holderId: z.string().uuid().optional(),
+  search: z.string().trim().max(100).optional(),
+});
+export type ListAssetsQuery = z.infer<typeof listAssetsQuerySchema>;
+
+export const assignAssetSchema = z.object({
+  employeeId: z.string().uuid(),
+  note: z.string().trim().max(300).nullish(),
+});
+export type AssignAssetInput = z.infer<typeof assignAssetSchema>;
+
+export const returnAssetSchema = z.object({
+  condition: z.enum(ASSET_CONDITIONS),
+  note: z.string().trim().max(300).nullish(),
+});
+export type ReturnAssetInput = z.infer<typeof returnAssetSchema>;
+
+export const assetStatusSchema = z.object({
+  status: z.enum(['IN_REPAIR', 'IN_STOCK', 'RETIRED', 'LOST']),
+  note: z.string().trim().max(300).nullish(),
+});
+export type AssetStatusInput = z.infer<typeof assetStatusSchema>;

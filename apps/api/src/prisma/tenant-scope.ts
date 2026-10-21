@@ -20,6 +20,8 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<Prisma.ModelName> = new Set<Prism
   'LeaveType',
   'LeaveRequest',
   'AttendanceRecord',
+  'Asset',
+  'AssetEvent',
 ]);
 
 type AnyArgs = Record<string, any>;
