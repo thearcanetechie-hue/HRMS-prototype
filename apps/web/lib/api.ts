@@ -337,3 +337,41 @@ export interface LeaveBalance {
   pending: number;
   left: number | null;
 }
+
+export interface HomeData {
+  scope: 'company' | 'team';
+  date: string;
+  headcount: number;
+  joinedThisMonth: number;
+  onNotice: number;
+  today: AttendanceToday;
+  attendanceWeek: { date: string; label: string; pct: number; weekend: boolean }[];
+  attendanceMonths: { label: string; pct: number }[];
+  requests: (
+    | { kind: 'leave'; id: string; summary: string; employee: HomePerson }
+    | { kind: 'task'; id: string; checklistId: string; summary: string; employee: HomePerson }
+  )[];
+  openRequests: number;
+  checklists: {
+    id: string;
+    kind: ChecklistKind;
+    startDate: string;
+    employee: { id: string; name: string };
+    progress: { done: number; total: number };
+    overdue: number;
+  }[];
+  events: {
+    kind: 'birthday' | 'anniversary' | 'joining' | 'leaving';
+    title: string;
+    when: string;
+    date: string;
+  }[];
+  teams: { name: string; count: number }[];
+}
+
+export interface HomePerson {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+}

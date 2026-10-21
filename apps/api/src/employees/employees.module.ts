@@ -26,6 +26,6 @@ import { EmployeesService } from './employees.service';
     InvitationsService,
     LifecycleService,
   ],
-  exports: [EmployeeAccess],
+  exports: [EmployeeAccess, LifecycleService],
 })
 export class EmployeesModule {}
