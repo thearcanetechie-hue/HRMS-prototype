@@ -4,7 +4,7 @@ import { Download, Filter, Upload, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
-import { ActivityLog } from '@/components/activity-log';
+import { ActivityFeed } from '@/components/activity-log';
 import { AddEmployee } from '@/components/add-employee';
 import { InviteButton } from '@/components/invite-button';
 import { Avatar } from '@/components/ui/avatar';
@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/ui/progress';
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api, ApiError, Employee, Named, Paged } from '@/lib/api';
-import { getEmployeeLog, LAST_SEEN, type LogEvent } from '@/lib/demo/employees';
+import type { AttendanceRegister } from '@/lib/api';
 import { initials, STATUS_TONE, titleCase } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { cn } from '@/lib/utils';
@@ -52,7 +52,7 @@ function Employees() {
   const [data, setData] = useState<Paged<Employee> | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [departments, setDepartments] = useState<Named[]>([]);
-  const [log, setLog] = useState<LogEvent[] | null>(null);
+  const [today, setToday] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(params.get('add') === '1');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -93,7 +93,28 @@ function Employees() {
     api<Named[]>('/org/departments')
       .then(setDepartments)
       .catch(() => undefined);
-    if (full) getEmployeeLog().then(setLog);
+    if (full)
+      api<AttendanceRegister>(`/attendance/register?month=${new Date().toISOString().slice(0, 7)}`)
+        .then((r) => {
+          const i = r.days.indexOf(r.today);
+          const names = new Map(r.leaveTypes.map((t) => [t.code, t.name]));
+          const label = (c?: { code: string; late?: boolean }) =>
+            !c || !c.code
+              ? '–'
+              : c.code === 'W'
+                ? 'Weekend'
+                : c.code === 'P'
+                  ? c.late
+                    ? 'In · late'
+                    : 'In'
+                  : c.code === 'A'
+                    ? 'Absent'
+                    : c.code === 'HD'
+                      ? 'Half day'
+                      : (names.get(c.code) ?? c.code);
+          setToday(Object.fromEntries(r.rows.map((row) => [row.employee.id, label(row.cells[i])])));
+        })
+        .catch(() => undefined);
   }, [full]);
 
   const filterCount = [status, departmentId].filter(Boolean).length;
@@ -137,7 +158,7 @@ function Employees() {
             <TH>Team</TH>
             <TH>Location</TH>
             {full && <TH>Status</TH>}
-            {full && <TH className="text-right">Last seen</TH>}
+            {full && <TH className="text-right">Today</TH>}
             {manage && <TH>Access</TH>}
           </tr>
         </THead>
@@ -150,7 +171,7 @@ function Employees() {
                 </TD>
               </TR>
             ))}
-          {data?.items.map((e, i) => (
+          {data?.items.map((e) => (
             <TR
               key={e.id}
               className="cursor-pointer"
@@ -189,7 +210,7 @@ function Employees() {
               )}
               {full && (
                 <TD className="text-right whitespace-nowrap text-muted-foreground">
-                  {e.status === 'EXITED' ? 'Left' : LAST_SEEN[i % LAST_SEEN.length]}
+                  {e.status === 'EXITED' ? 'Left' : (today[e.id] ?? '–')}
                 </TD>
               )}
               {manage && (
@@ -305,7 +326,7 @@ function Employees() {
                     <Download /> Export
                   </Button>
                 </CardHeader>
-                {log ? <ActivityLog events={log} /> : <Skeleton className="h-60" />}
+                <ActivityFeed take={12} />
               </Card>
             </div>
           ) : (
@@ -320,7 +341,7 @@ function Employees() {
                 <CardDescription>Every change, in order</CardDescription>
               </div>
             </CardHeader>
-            {log ? <ActivityLog events={log} /> : <Skeleton className="h-60" />}
+            <ActivityFeed take={100} />
           </Card>
         </TabsContent>
         <TabsContent value="org">

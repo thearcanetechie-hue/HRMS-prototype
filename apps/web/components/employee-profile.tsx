@@ -16,10 +16,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityLog } from './activity-log';
+import { ActivityFeed } from './activity-log';
 import { ProfileAssetsCard } from './assets';
 import { ProfileChecklistCard } from './checklists';
 import { EmployeeDocumentsCard } from './documents';
+import { EmployeeAttendanceCard, EmployeeLeaveCard } from './person-cards';
 import { InviteButton } from './invite-button';
 import { ProfileForm } from './profile-form';
 import { Badge } from './ui/badge';
@@ -214,66 +215,8 @@ export function EmployeeProfileView({
     </Card>
   );
 
-  const attendanceCard = extras ? (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>October attendance</CardTitle>
-          <CardDescription>{extras.attendance.period}</CardDescription>
-        </div>
-        <DemoBadge />
-      </CardHeader>
-      <div className="flex flex-wrap items-center gap-6">
-        <ProgressRing
-          size={120}
-          value={(extras.attendance.presentDays / extras.attendance.workingDays) * 100}
-          label="Attendance"
-          caption={`${extras.attendance.presentDays}/${extras.attendance.workingDays} days`}
-        />
-        <dl className="grid grow gap-2">
-          {(
-            [
-              ['Avg check-in', extras.attendance.avgCheckIn],
-              ['Avg hours', extras.attendance.avgHours],
-              ['Late marks', String(extras.attendance.lateMarks)],
-              ['Overtime', extras.attendance.overtime],
-            ] as const
-          ).map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">{k}</dt>
-              <dd className="font-mono text-[13px] font-semibold">{v}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </Card>
-  ) : (
-    <Skeleton className="h-48 rounded-2xl" />
-  );
-
-  const leaveCard = extras && (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Leave balance</CardTitle>
-          <CardDescription>{new Date().getFullYear()}</CardDescription>
-        </div>
-      </CardHeader>
-      <ul className="grid gap-3.5">
-        {extras.leave.map((l) => (
-          <li key={l.type} className="grid gap-1.5">
-            <div className="flex justify-between gap-2">
-              <span className="font-semibold">{l.type}</span>
-              <span className="text-[13px] text-muted-foreground">
-                {l.left} of {l.total} left
-              </span>
-            </div>
-            <ProgressBar value={(l.left / l.total) * 100} tone={l.tone} label={l.type} />
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
+  const attendanceCard = <EmployeeAttendanceCard employeeId={employee.id} />;
+  const leaveCard = <EmployeeLeaveCard employeeId={employee.id} />;
 
   const documentsCard = <EmployeeDocumentsCard employeeId={employee.id} self={self} />;
 
@@ -408,9 +351,8 @@ export function EmployeeProfileView({
           <Card>
             <CardHeader>
               <CardTitle>Timeline</CardTitle>
-              <DemoBadge />
             </CardHeader>
-            {extras ? <ActivityLog events={extras.timeline} /> : <Skeleton className="h-40" />}
+            <ActivityFeed employeeId={employee.id} take={50} />
           </Card>
         </TabsContent>
       </Tabs>

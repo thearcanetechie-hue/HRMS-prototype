@@ -3,10 +3,9 @@
 import {
   Award,
   CalendarDays,
-  CheckCircle2,
-  Clock,
+  Check,
   Inbox,
-  Play,
+  LogOut,
   Star,
   UserCheck,
   UserPlus,
@@ -14,28 +13,27 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { BarChart } from '@/components/ui/bar-chart';
-import { ActivityItem, ApproveButtons, LegendDot, Toast, useToast } from '@/components/ui/bits';
+import { ActivityItem, ApproveButtons, Toast, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Banner, DemoBadge, Empty, PageHeader } from '@/components/ui/page';
+import { Banner, Empty, PageHeader } from '@/components/ui/page';
 import { ProgressBar, Skeleton } from '@/components/ui/progress';
-import { ProgressRing } from '@/components/ui/progress-ring';
 import { StatCard } from '@/components/ui/stat-card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Tone } from '@/components/ui/tone';
-import { api, Employee, Paged } from '@/lib/api';
-import { getHomeSummary, type HomeSummary } from '@/lib/demo/home';
+import { api, ApiError, type HomeData } from '@/lib/api';
+import { formatDate, initials } from '@/lib/format';
 import { useSession } from '@/lib/session';
 
-const EVENT_ICON: Record<HomeSummary['events'][number]['kind'], [LucideIcon, Tone]> = {
+const EVENT_ICON: Record<HomeData['events'][number]['kind'], [LucideIcon, Tone]> = {
   birthday: [Star, 'primary'],
   anniversary: [Award, 'detail'],
-  holiday: [CalendarDays, 'warning'],
   joining: [UserPlus, 'success'],
+  leaving: [LogOut, 'warning'],
 };
 
 function greeting() {
@@ -45,31 +43,46 @@ function greeting() {
 
 export default function HomePage() {
   const { me, can } = useSession();
-  const [data, setData] = useState<HomeSummary | null>(null);
-  const [error, setError] = useState(false);
-  const [headcount, setHeadcount] = useState<number | null>(null);
+  const [data, setData] = useState<HomeData | null>(null);
+  const [error, setError] = useState('');
   const [range, setRange] = useState('week');
+  const [busy, setBusy] = useState<string | null>(null);
   const [toast, showToast] = useToast();
 
-  const load = () => {
-    setError(false);
-    getHomeSummary()
+  const load = useCallback(() => {
+    setError('');
+    api<HomeData>('/dashboard/home')
       .then(setData)
-      .catch(() => setError(true));
-  };
-  useEffect(load, []);
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : 'Could not load today’s summary.'),
+      );
+  }, []);
+  useEffect(load, [load]);
 
-  // Headcount is real: it comes from the employees API.
-  useEffect(() => {
-    if (!can('employee.read')) return;
-    api<Paged<Employee>>('/employees?pageSize=1')
-      .then((r) => setHeadcount(r.total))
-      .catch(() => setHeadcount(null));
-  }, [can]);
-
-  function decide(id: string, name: string, approved: boolean) {
-    setData((d) => d && { ...d, requests: d.requests.filter((r) => r.id !== id) });
-    showToast(`${approved ? 'Approved' : 'Declined'} ${name}'s request`);
+  async function decide(item: HomeData['requests'][number], approve: boolean) {
+    setBusy(item.id);
+    try {
+      if (item.kind === 'leave')
+        await api(`/leave/requests/${item.id}/decision`, {
+          method: 'POST',
+          body: JSON.stringify({ decision: approve ? 'APPROVE' : 'REJECT' }),
+        });
+      else
+        await api(`/checklists/${item.checklistId}/tasks/${item.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ done: true }),
+        });
+      showToast(
+        item.kind === 'leave'
+          ? `${approve ? 'Approved' : 'Declined'} ${item.employee.firstName}’s leave`
+          : `Done: ${item.summary.split(' · ')[0]}`,
+      );
+      load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Could not update that');
+    } finally {
+      setBusy(null);
+    }
   }
 
   const today = new Date().toLocaleDateString('en-IN', {
@@ -79,45 +92,54 @@ export default function HomePage() {
     year: 'numeric',
   });
   const firstName = me.user.fullName.split(' ')[0];
-  const total = headcount ?? data?.headcount;
-  const hr = can('employee.read');
-  const biggestTeam = Math.max(1, ...(data?.teams.map((t) => t.count) ?? [1]));
+  const hr = can('employee.manage');
+  const t = data?.today;
+  const presentPct = data && data.headcount ? Math.round((t!.present / data.headcount) * 100) : 0;
+  const biggestTeam = Math.max(1, ...(data?.teams.map((x) => x.count) ?? [1]));
+  const weekdays = data?.attendanceWeek.filter((d) => !d.weekend) ?? [];
+  const lastWorkday = [...weekdays].reverse().find((d) => d.date <= (data?.date ?? ''));
 
   return (
     <>
       <PageHeader
         eyebrow={today}
-        title={
-          <span className="flex flex-wrap items-center gap-3">
-            {greeting()}, {firstName} <DemoBadge />
-          </span>
-        }
+        title={`${greeting()}, ${firstName}`}
         description={
           data
-            ? `${data.presentToday} of ${data.headcount} people are in today. ${data.openRequests} requests are waiting for you.`
+            ? `${t!.present} of ${data.headcount} ${data.scope === 'team' ? 'in your team ' : ''}are in today${
+                data.openRequests
+                  ? `. ${data.openRequests} ${data.openRequests === 1 ? 'thing is' : 'things are'} waiting for you.`
+                  : '.'
+              }`
             : 'Loading today’s numbers…'
         }
         actions={
-          hr && (
+          hr ? (
             <>
               <Button asChild>
+                <Link href="/attendance">
+                  <CalendarDays /> Attendance & leave
+                </Link>
+              </Button>
+              <Button variant="primary" asChild>
                 <Link href="/employees?add=1">
                   <UserPlus /> Add employee
                 </Link>
               </Button>
-              <Button variant="primary" asChild>
-                <Link href="/payroll">
-                  <Play /> Run {data?.payroll.month ?? 'this month’s'} payroll
-                </Link>
-              </Button>
             </>
+          ) : (
+            <Button variant="primary" asChild>
+              <Link href="/attendance">
+                <CalendarDays /> Apply for leave
+              </Link>
+            </Button>
           )
         }
       />
 
       {error && (
         <Banner>
-          Could not load today’s summary.
+          {error}
           <Button size="sm" className="ml-auto" onClick={load}>
             Retry
           </Button>
@@ -125,44 +147,47 @@ export default function HomePage() {
       )}
 
       {!data ? (
-        <div className="grid gap-5">
-          <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-2xl" />
-            ))}
+        !error && (
+          <div className="grid gap-5">
+            <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-36 rounded-2xl" />
+              ))}
+            </div>
+            <Skeleton className="h-72 rounded-2xl" />
           </div>
-          <Skeleton className="h-72 rounded-2xl" />
-        </div>
+        )
       ) : (
         <div className="grid gap-5">
           <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
             <StatCard
               icon={<Users />}
-              value={total}
-              label="Headcount"
-              delta={`+${data.joinedThisMonth} this month`}
+              value={data.headcount}
+              label={data.scope === 'team' ? 'In your team' : 'Headcount'}
+              delta={data.joinedThisMonth ? `+${data.joinedThisMonth} this month` : undefined}
             />
             <StatCard
               icon={<UserCheck />}
               tone="success"
-              value={data.presentToday}
+              value={t!.present}
               label="Present today"
-              delta={`${Math.round((data.presentToday / data.headcount) * 100)}%`}
+              delta={t!.weekend ? 'Weekend' : `${presentPct}%`}
+              deltaTone={t!.weekend ? 'info' : 'success'}
             />
             <StatCard
               icon={<CalendarDays />}
               tone="warning"
-              value={data.onLeave}
-              label="On leave"
-              delta={`${data.sickToday} sick`}
+              value={t!.onLeave + t!.field}
+              label="On leave or field visit"
+              delta={t!.late ? `${t!.late} late` : undefined}
               deltaTone="warning"
             />
             <StatCard
               icon={<Inbox />}
               tone="danger"
               value={data.openRequests}
-              label="Open requests"
-              delta={`${data.urgentRequests} urgent`}
+              label="Waiting on you"
+              delta={data.onNotice ? `${data.onNotice} on notice` : undefined}
               deltaTone="danger"
             />
           </div>
@@ -171,8 +196,10 @@ export default function HomePage() {
             <Card>
               <CardHeader>
                 <div>
-                  <CardTitle>Attendance this {range}</CardTitle>
-                  <CardDescription>Share of people checked in by 10:00</CardDescription>
+                  <CardTitle>
+                    {range === 'week' ? 'Attendance, last 7 days' : 'Attendance by month'}
+                  </CardTitle>
+                  <CardDescription>Share of people present each working day</CardDescription>
                 </div>
                 <Tabs value={range} onValueChange={setRange}>
                   <TabsList>
@@ -185,28 +212,37 @@ export default function HomePage() {
                 label="Attendance"
                 max={100}
                 format={(v) => `${v}%`}
-                highlight={range === 'week' ? 'Fri 16' : 'Oct'}
-                data={(range === 'week' ? data.attendanceWeek : data.attendanceMonth).map((d) => ({
-                  label: d.label,
-                  value: d.pct,
-                }))}
+                highlight={
+                  range === 'week' ? lastWorkday?.date : data.attendanceMonths.at(-1)?.label
+                }
+                data={
+                  range === 'week'
+                    ? data.attendanceWeek.map((d) => ({
+                        key: d.date,
+                        label: d.label,
+                        value: d.pct,
+                      }))
+                    : data.attendanceMonths.map((d) => ({ label: d.label, value: d.pct }))
+                }
               />
-              <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2">
-                <LegendDot className="bg-primary" label="On time" value="88%" />
-                <LegendDot className="bg-warning" label="Late" value="5%" />
-                <LegendDot className="bg-detail" label="Field visit" value="3%" />
-                <LegendDot className="bg-danger" label="Absent" value="4%" />
-              </div>
+              {weekdays.every((d) => d.pct === 0) && (
+                <p className="mt-4 text-[13px] text-muted-foreground">
+                  No attendance recorded yet. It fills in as people check in or HR marks the
+                  register.
+                </p>
+              )}
             </Card>
 
             <Card>
               <CardHeader>
                 <div>
                   <CardTitle>Needs your attention</CardTitle>
-                  <CardDescription>{data.openRequests} open</CardDescription>
+                  <CardDescription>
+                    {data.openRequests ? `${data.openRequests} open` : 'All clear'}
+                  </CardDescription>
                 </div>
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href="/inbox">View all</Link>
+                  <Link href="/attendance#requests">View all</Link>
                 </Button>
               </CardHeader>
               {data.requests.length ? (
@@ -216,16 +252,31 @@ export default function HomePage() {
                       key={r.id}
                       className="flex items-center gap-3 rounded-[14px] bg-surface-2/70 p-3"
                     >
-                      <Avatar size="sm" initials={r.employee.initials} />
+                      <Avatar
+                        size="sm"
+                        initials={initials(r.employee.firstName, r.employee.lastName)}
+                      />
                       <div className="min-w-0 grow">
                         <div className="truncate font-bold">{r.employee.name}</div>
                         <div className="truncate text-xs text-muted-foreground">{r.summary}</div>
                       </div>
-                      <ApproveButtons
-                        subject={`${r.employee.name}: ${r.summary}`}
-                        onApprove={() => decide(r.id, r.employee.name, true)}
-                        onDecline={() => decide(r.id, r.employee.name, false)}
-                      />
+                      {r.kind === 'leave' ? (
+                        <ApproveButtons
+                          subject={`${r.employee.name}: ${r.summary}`}
+                          onApprove={() => decide(r, true)}
+                          onDecline={() => decide(r, false)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={`Mark done: ${r.summary}`}
+                          disabled={busy === r.id}
+                          onClick={() => decide(r, true)}
+                          className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-success/12 text-success hover:brightness-110"
+                        >
+                          <Check className="size-4" />
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -239,31 +290,45 @@ export default function HomePage() {
             <Card>
               <CardHeader>
                 <div>
-                  <CardTitle>{data.payroll.month} payroll</CardTitle>
-                  <CardDescription>
-                    Pay date {data.payroll.payDate} · {data.payroll.daysLeft} days left
-                  </CardDescription>
+                  <CardTitle>Joining and leaving</CardTitle>
+                  <CardDescription>Checklists in progress</CardDescription>
                 </div>
-                <Badge tone="accent">In progress</Badge>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/lifecycle">Open</Link>
+                </Button>
               </CardHeader>
-              <div className="mb-5 flex justify-center">
-                <ProgressRing value={data.payroll.readyPct} label="Payroll ready" caption="ready" />
-              </div>
-              <ul className="grid gap-2.5">
-                {data.payroll.checks.map((c) => {
-                  const done = c.done === c.total;
-                  const Icon = done ? CheckCircle2 : Clock;
-                  return (
-                    <li key={c.label} className="flex items-center gap-2.5">
-                      <Icon className={done ? 'size-4 text-success' : 'size-4 text-warning'} />
-                      <span className="grow font-semibold">{c.label}</span>
-                      <span className="font-mono text-[13px] text-muted-foreground">
-                        {c.done} / {c.total}
-                      </span>
+              {data.checklists.length ? (
+                <ul className="grid gap-3.5">
+                  {data.checklists.map((c) => (
+                    <li key={c.id} className="grid gap-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <Link
+                          href={`/lifecycle?checklist=${c.id}`}
+                          className="truncate font-semibold text-inherit no-underline"
+                        >
+                          {c.employee.name}
+                        </Link>
+                        <Badge tone={c.kind === 'ONBOARDING' ? 'success' : 'warning'}>
+                          {c.kind === 'ONBOARDING' ? 'Joins' : 'Leaves'} {formatDate(c.startDate)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <ProgressBar
+                          value={c.progress.total ? (c.progress.done / c.progress.total) * 100 : 0}
+                        />
+                        <span className="font-mono text-xs whitespace-nowrap text-muted-foreground">
+                          {c.progress.done}/{c.progress.total}
+                        </span>
+                      </div>
+                      {c.overdue > 0 && (
+                        <span className="text-xs font-bold text-danger">{c.overdue} overdue</span>
+                      )}
                     </li>
-                  );
-                })}
-              </ul>
+                  ))}
+                </ul>
+              ) : (
+                <Empty className="py-10">No one joining or leaving right now.</Empty>
+              )}
             </Card>
 
             <Card>
@@ -273,33 +338,48 @@ export default function HomePage() {
                   <CardDescription>Next 14 days</CardDescription>
                 </div>
               </CardHeader>
-              <ul className="grid gap-4">
-                {data.events.map((e) => {
-                  const [Icon, tone] = EVENT_ICON[e.kind];
-                  return (
-                    <li key={e.title}>
-                      <ActivityItem icon={<Icon />} tone={tone} title={e.title} caption={e.when} />
-                    </li>
-                  );
-                })}
-              </ul>
+              {data.events.length ? (
+                <ul className="grid gap-4">
+                  {data.events.map((e) => {
+                    const [Icon, tone] = EVENT_ICON[e.kind];
+                    return (
+                      <li key={e.title + e.date}>
+                        <ActivityItem
+                          icon={<Icon />}
+                          tone={tone}
+                          title={e.title}
+                          caption={e.when}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <Empty className="py-10">
+                  No birthdays, anniversaries or joiners in the next two weeks.
+                </Empty>
+              )}
             </Card>
 
             <Card>
               <CardHeader>
                 <div>
                   <CardTitle>Headcount by team</CardTitle>
-                  <CardDescription>{total} people</CardDescription>
+                  <CardDescription>
+                    {data.headcount} {data.headcount === 1 ? 'person' : 'people'}
+                  </CardDescription>
                 </div>
               </CardHeader>
               <ul className="grid gap-3.5">
-                {data.teams.map((t) => (
-                  <li key={t.name} className="grid gap-1.5">
+                {data.teams.map((tm) => (
+                  <li key={tm.name} className="grid gap-1.5">
                     <div className="flex justify-between gap-2">
-                      <span className="font-semibold">{t.name}</span>
-                      <span className="font-mono text-[13px] text-muted-foreground">{t.count}</span>
+                      <span className="font-semibold">{tm.name}</span>
+                      <span className="font-mono text-[13px] text-muted-foreground">
+                        {tm.count}
+                      </span>
                     </div>
-                    <ProgressBar value={(t.count / biggestTeam) * 100} label={t.name} />
+                    <ProgressBar value={(tm.count / biggestTeam) * 100} label={tm.name} />
                   </li>
                 ))}
               </ul>

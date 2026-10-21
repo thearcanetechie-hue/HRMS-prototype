@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import type { NextFunction, Request, Response } from 'express';
 import { AssetsModule } from './assets/assets.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthGuard } from './auth/auth.guard';
@@ -33,6 +34,7 @@ import { RolesModule } from './roles/roles.module';
     DocumentsModule,
     AttendanceModule,
     AssetsModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
   providers: [
