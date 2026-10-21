@@ -707,3 +707,39 @@ export const kudosSchema = z.object({
   reason: z.string().trim().min(2).max(300),
 });
 export type KudosInput = z.infer<typeof kudosSchema>;
+
+export const COURSE_MODES = ['GOOGLE_MEET', 'ZOOM', 'TEAMS', 'IN_PERSON', 'SELF_PACED'] as const;
+
+const courseBase = z.object({
+  title: z.string().trim().min(2).max(160),
+  description: z.string().trim().max(2000).nullish(),
+  category: z.string().trim().min(2).max(40),
+  leadId: z.string().uuid().nullish(),
+  /** Leave empty for everyone. */
+  departmentId: z.string().uuid().nullish(),
+  mandatory: z.boolean().default(false),
+  seats: z.number().int().min(1).max(10000).nullish(),
+  startsOn: isoDate,
+  endsOn: isoDate,
+  hours: z.number().min(0.5).max(500).default(1),
+  mode: z.enum(COURSE_MODES).default('GOOGLE_MEET'),
+  meetingLink: z.string().trim().url().max(500).nullish().or(z.literal('')),
+});
+export const courseSchema = courseBase.refine((c) => c.endsOn >= c.startsOn, {
+  message: 'The course ends before it starts',
+  path: ['endsOn'],
+});
+export type CourseInput = z.infer<typeof courseSchema>;
+export const updateCourseSchema = courseBase.partial();
+export type UpdateCourseInput = z.infer<typeof updateCourseSchema>;
+
+export const courseSessionSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  startsAt: z.string().datetime({ offset: true }),
+  minutes: z.number().int().min(10).max(600).default(60),
+  location: z.string().trim().max(200).nullish(),
+});
+export type CourseSessionInput = z.infer<typeof courseSessionSchema>;
+
+export const enrollSchema = z.object({ employeeIds: z.array(z.string().uuid()).min(1).max(500) });
+export const progressSchema = z.object({ progress: z.number().int().min(0).max(100) });

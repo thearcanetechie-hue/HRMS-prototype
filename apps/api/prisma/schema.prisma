@@ -91,6 +91,9 @@ model Tenant {
   reviewCycles  ReviewCycle[]
   reviews       Review[]
   kudos         Kudos[]
+  courses       Course[]
+  courseSessions CourseSession[]
+  enrollments   Enrollment[]
 }
 
 model User {
@@ -202,6 +205,7 @@ model Department {
   parentId  String?  @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  courses   Course[]
 
   tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
@@ -271,6 +275,8 @@ model Employee {
   reviewsGiven Review[]         @relation("Reviewer")
   kudosSent   Kudos[]           @relation("KudosFrom")
   kudosReceived Kudos[]         @relation("KudosTo")
+  coursesLed    Course[]          @relation("CourseLead")
+  enrollments   Enrollment[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -928,4 +934,74 @@ model Kudos {
   to     Employee @relation("KudosTo", fields: [toId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, createdAt])
+}
+
+enum CourseMode {
+  GOOGLE_MEET
+  ZOOM
+  TEAMS
+  IN_PERSON
+  SELF_PACED
+}
+
+/// A course the company runs. Mandatory courses enrol everyone in the audience.
+model Course {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @db.Uuid
+  title        String
+  description  String?
+  category     String
+  leadId       String?    @db.Uuid
+  /// Null means everyone; otherwise one department.
+  departmentId String?    @db.Uuid
+  mandatory    Boolean    @default(false)
+  seats        Int?
+  startsOn     DateTime   @db.Date
+  endsOn       DateTime   @db.Date
+  hours        Decimal    @default(1) @db.Decimal(6, 1)
+  mode         CourseMode @default(GOOGLE_MEET)
+  meetingLink  String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead        Employee?       @relation("CourseLead", fields: [leadId], references: [id], onDelete: SetNull)
+  department  Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  sessions    CourseSession[]
+  enrollments Enrollment[]
+
+  @@index([tenantId, startsOn])
+}
+
+model CourseSession {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @db.Uuid
+  courseId String   @db.Uuid
+  title    String
+  startsAt DateTime
+  minutes  Int      @default(60)
+  location String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startsAt])
+}
+
+model Enrollment {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  courseId    String    @db.Uuid
+  employeeId  String    @db.Uuid
+  progress    Int       @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, employeeId])
+  @@index([tenantId, employeeId])
 }

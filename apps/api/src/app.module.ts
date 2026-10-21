@@ -8,6 +8,7 @@ import { ClaimsModule } from './claims/claims.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { PerformanceModule } from './performance/performance.module';
+import { LearningModule } from './learning/learning.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthGuard } from './auth/auth.guard';
@@ -41,6 +42,7 @@ import { RolesModule } from './roles/roles.module';
     ClaimsModule,
     PayrollModule,
     PerformanceModule,
+    LearningModule,
   ],
   controllers: [HealthController],
   providers: [
