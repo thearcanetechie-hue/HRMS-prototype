@@ -313,6 +313,7 @@ export const DOCUMENT_CATEGORIES = [
   'Payslip',
   'Form 16',
   'Bank proof',
+  'Receipt',
   'Policy',
   'Contract',
   'Other',
@@ -591,3 +592,54 @@ export const assetStatusSchema = z.object({
   note: z.string().trim().max(300).nullish(),
 });
 export type AssetStatusInput = z.infer<typeof assetStatusSchema>;
+
+// ---------- Overtime and expense claims ----------
+
+export const CLAIM_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'ON_HOLD', 'PAID'] as const;
+export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
+
+export const createOvertimeSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-21'),
+  hours: z.number().min(0.5).max(16),
+  reason: z.string().trim().min(2).max(300),
+});
+export type CreateOvertimeInput = z.infer<typeof createOvertimeSchema>;
+
+export const createExpenseSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  categoryId: z.string().uuid(),
+  spentOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-21'),
+  /** Whole rupees. */
+  amount: z.number().int().min(1).max(10_00_000),
+  description: z.string().trim().min(2).max(300),
+  /** A document already uploaded to the employee's files (category Receipt). */
+  receiptDocumentId: z.string().uuid().nullish(),
+});
+export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
+
+export const decideClaimsSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  decision: z.enum(['APPROVE', 'REJECT', 'HOLD', 'PAID']),
+  note: z.string().trim().max(300).nullish(),
+});
+export type DecideClaimsInput = z.infer<typeof decideClaimsSchema>;
+
+export const listClaimsQuerySchema = z.object({
+  status: z.enum(CLAIM_STATUSES).optional(),
+  employeeId: z.string().uuid().optional(),
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
+});
+export type ListClaimsQuery = z.infer<typeof listClaimsQuerySchema>;
+
+export const claimCategorySchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  /** Most that one claim may be for; null means no limit. */
+  limitPerClaim: z.number().int().min(1).max(10_00_000).nullable().default(null),
+  needsReceipt: z.boolean().default(true),
+  active: z.boolean().default(true),
+});
+export type ClaimCategoryInput = z.infer<typeof claimCategorySchema>;

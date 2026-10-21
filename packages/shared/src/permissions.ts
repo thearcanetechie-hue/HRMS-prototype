@@ -21,6 +21,7 @@ export const PERMISSIONS = {
   'attendance.manage':
     'Mark attendance for anyone, decide any leave request and set up leave types',
   'asset.manage': 'Keep the asset register: add, assign, take back, repair and retire assets',
+  'claims.manage': 'Decide any overtime or expense claim, mark claims paid and set claim limits',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -54,6 +55,7 @@ export const SYSTEM_ROLES: Record<
       'lifecycle.manage',
       'attendance.manage',
       'asset.manage',
+      'claims.manage',
       'audit.read',
     ],
   },

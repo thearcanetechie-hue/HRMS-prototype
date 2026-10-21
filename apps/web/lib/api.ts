@@ -375,3 +375,65 @@ export interface HomePerson {
   firstName: string;
   lastName: string;
 }
+
+export type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ON_HOLD' | 'PAID';
+
+export interface ClaimPerson {
+  id: string;
+  firstName: string;
+  lastName: string;
+  employeeCode: string;
+  department: Named | null;
+}
+
+export interface OvertimeItem {
+  id: string;
+  employeeId: string;
+  date: string;
+  hours: number;
+  reason: string;
+  status: ClaimStatus;
+  decisionNote: string | null;
+  createdAt: string;
+  canDecide: boolean;
+  employee: ClaimPerson;
+}
+
+export interface ClaimCategory {
+  id: string;
+  name: string;
+  limitPerClaim: number | null;
+  needsReceipt: boolean;
+  active: boolean;
+}
+
+export interface ExpenseItem {
+  id: string;
+  employeeId: string;
+  spentOn: string;
+  amount: number;
+  description: string;
+  receiptDocumentId: string | null;
+  status: ClaimStatus;
+  decisionNote: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  overLimit: boolean;
+  canDecide: boolean;
+  canMarkPaid: boolean;
+  employee: ClaimPerson;
+  category: Pick<ClaimCategory, 'id' | 'name' | 'limitPerClaim' | 'needsReceipt'>;
+}
+
+export interface ClaimsSummary {
+  month: string;
+  overtimeHours: number;
+  overtimeApprovedHours: number;
+  pendingClaims: number;
+  pendingAmount: number;
+  monthSpend: number;
+  avgApprovalDays: number | null;
+  spendByCategory: { label: string; amount: number }[];
+  canManage: boolean;
+  selfEmployeeId: string | null;
+}
