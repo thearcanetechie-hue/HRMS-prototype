@@ -26,6 +26,12 @@ const person = {
 } satisfies Prisma.EmployeeDefaultArgs;
 
 const name = (e: { firstName: string; lastName: string }) => `${e.firstName} ${e.lastName}`.trim();
+const short = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
 const inr = (n: number) => `₹ ${Math.round(n).toLocaleString('en-IN')}`;
 
 export type Folder = 'all' | 'starred' | 'sent' | 'channels';
@@ -352,7 +358,7 @@ export class InboxService {
 
   // ---------- approvals and counts ----------
 
-  /** Everything waiting on the caller's decision, newest first. */
+  /** Everything waiting on the caller: decisions first, then checklist tasks due within a week. */
   async approvals() {
     const today = todayIst();
     const [leave, overtime, expenses, checklists] = await Promise.all([
@@ -367,7 +373,7 @@ export class InboxService {
         id: r.id,
         employee: r.employee,
         title: `${r.leaveType.name} leave`,
-        summary: `${isoDay(new Date(r.startDate))}${r.endDate !== r.startDate ? ` to ${isoDay(new Date(r.endDate))}` : ''} · ${r.halfDay ? 'half day' : `${r.days} ${r.days === 1 ? 'day' : 'days'}`}`,
+        summary: `${short(isoDay(new Date(r.startDate)))}${r.endDate !== r.startDate ? ` to ${short(isoDay(new Date(r.endDate)))}` : ''} ·${r.halfDay ? 'half day' : `${r.days} ${r.days === 1 ? 'day' : 'days'}`}`,
         at: new Date(r.createdAt).toISOString(),
         href: '/attendance?tab=requests',
       })),
@@ -378,7 +384,7 @@ export class InboxService {
           id: r.id,
           employee: r.employee,
           title: `Overtime · ${r.hours} h`,
-          summary: `${r.date} · ${r.reason}`,
+          summary: `${short(r.date)} · ${r.reason}`,
           at: r.createdAt.toISOString(),
           href: '/claims',
         })),
@@ -401,13 +407,15 @@ export class InboxService {
             id: t.id,
             employee: c.employee,
             title: t.title,
-            summary: `${c.kind === 'OFFBOARDING' ? 'Offboarding' : 'Onboarding'} for ${name(c.employee)} · ${t.overdue ? 'overdue' : `due ${t.dueDate}`}`,
+            summary: `${c.kind === 'OFFBOARDING' ? 'Offboarding' : 'Onboarding'} for ${name(c.employee)} · ${t.overdue ? 'overdue' : `due ${short(t.dueDate)}`}`,
             at: `${t.dueDate}T00:00:00.000Z`,
             href: `/employees/${c.employee.id}`,
           })),
       ),
     ];
-    return items.sort((a, b) => b.at.localeCompare(a.at));
+    // Decisions first, oldest waiting at the top; then checklist tasks by due date.
+    const rank = (k: string) => (k === 'TASK' ? 1 : 0);
+    return items.sort((a, b) => rank(a.kind) - rank(b.kind) || a.at.localeCompare(b.at));
   }
 
   /** Unread messages and waiting approvals, for the navigation badge. */
