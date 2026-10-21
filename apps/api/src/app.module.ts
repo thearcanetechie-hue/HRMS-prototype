@@ -10,6 +10,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { PerformanceModule } from './performance/performance.module';
 import { LearningModule } from './learning/learning.module';
 import { EngagementModule } from './engagement/engagement.module';
+import { InboxModule } from './inbox/inbox.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthGuard } from './auth/auth.guard';
@@ -45,6 +46,7 @@ import { RolesModule } from './roles/roles.module';
     PerformanceModule,
     LearningModule,
     EngagementModule,
+    InboxModule,
   ],
   controllers: [HealthController],
   providers: [

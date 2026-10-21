@@ -104,6 +104,9 @@ model Tenant {
   pulseSurveys  PulseSurvey[]
   pulseParticipants PulseParticipant[]
   pulseResponses PulseResponse[]
+  conversations Conversation[]
+  conversationMembers ConversationMember[]
+  messages      Message[]
 }
 
 model User {
@@ -294,6 +297,8 @@ model Employee {
   eventRsvps    EventRsvp[]
   pollVotes     PollVote[]
   pulseParticipations PulseParticipant[]
+  conversations ConversationMember[]
+  messages      Message[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -1197,4 +1202,62 @@ model PulseResponse {
   survey PulseSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 
   @@index([surveyId])
+}
+
+enum ConversationKind {
+  DIRECT
+  CHANNEL
+}
+
+/// A private conversation between people, or a public channel anyone in the workspace can join.
+model Conversation {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @db.Uuid
+  kind          ConversationKind @default(DIRECT)
+  subject       String
+  /// Channels only: lower-case name without the #, unique per workspace.
+  channelName   String?
+  description   String?
+  createdById   String?          @db.Uuid
+  lastMessageAt DateTime         @default(now())
+  createdAt     DateTime         @default(now())
+
+  tenant   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members  ConversationMember[]
+  messages Message[]
+
+  @@unique([tenantId, channelName])
+  @@index([tenantId, lastMessageAt])
+}
+
+model ConversationMember {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  conversationId String    @db.Uuid
+  employeeId     String    @db.Uuid
+  lastReadAt     DateTime?
+  starred        Boolean   @default(false)
+  joinedAt       DateTime  @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, employeeId])
+  @@index([tenantId, employeeId])
+}
+
+model Message {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  conversationId String   @db.Uuid
+  authorId       String   @db.Uuid
+  body           String
+  createdAt      DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author       Employee     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }

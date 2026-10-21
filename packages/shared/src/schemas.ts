@@ -786,3 +786,20 @@ export const pulseResponseSchema = z.object({
   comment: z.string().trim().max(1000).nullish(),
 });
 export type PulseResponseInput = z.infer<typeof pulseResponseSchema>;
+
+export const messageSchema = z.object({ body: z.string().trim().min(1).max(4000) });
+export const newConversationSchema = z.object({
+  toIds: z.array(z.string().uuid()).min(1).max(50),
+  subject: z.string().trim().max(160).optional(),
+  body: z.string().trim().min(1).max(4000),
+});
+export type NewConversationInput = z.infer<typeof newConversationSchema>;
+export const channelSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9][a-z0-9-]{1,39}$/, 'Use 2 to 40 lower-case letters, numbers or dashes'),
+  description: z.string().trim().max(200).nullish(),
+});
+export type ChannelInput = z.infer<typeof channelSchema>;

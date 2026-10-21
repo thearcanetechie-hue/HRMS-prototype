@@ -28,12 +28,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { ThemeToggle } from '@/components/theme';
 import { Avatar } from '@/components/ui/avatar';
 import { SearchField } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
+import { api } from '@/lib/api';
 import { RequireSession, useSession } from '@/lib/session';
 import { cn } from '@/lib/utils';
 
@@ -42,7 +43,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  count?: number;
+  badge?: 'inbox';
   show: (can: Can, hasEmployee: boolean) => boolean;
 };
 
@@ -103,7 +104,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'People & comms',
     items: [
       { href: '/engagement', label: 'Engagement', icon: Heart, show: always },
-      { href: '/inbox', label: 'Inbox', icon: Inbox, count: 4, show: always },
+      { href: '/inbox', label: 'Inbox', icon: Inbox, badge: 'inbox', show: always },
     ],
   },
   {
@@ -168,6 +169,15 @@ function Shell({ children }: { children: ReactNode }) {
   const { me, can } = useSession();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [counts, setCounts] = useState({ unread: 0, approvals: 0 });
+
+  // Unread messages and approvals waiting on the caller, refreshed on each page change.
+  useEffect(() => {
+    api<{ unread: number; approvals: number }>('/inbox/counts')
+      .then(setCounts)
+      .catch(() => undefined);
+  }, [pathname]);
+  const inboxCount = counts.unread + counts.approvals;
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[264px_1fr]">
@@ -224,9 +234,9 @@ function Shell({ children }: { children: ReactNode }) {
                     >
                       <n.icon className="size-[18px]" />
                       <span className="grow">{n.label}</span>
-                      {n.count != null && (
+                      {n.badge === 'inbox' && inboxCount > 0 && (
                         <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground tabular">
-                          {n.count}
+                          {inboxCount}
                         </span>
                       )}
                     </Link>
@@ -258,11 +268,13 @@ function Shell({ children }: { children: ReactNode }) {
             <div className="ml-auto flex items-center gap-3">
               <Link
                 href="/inbox"
-                aria-label="Notifications"
+                aria-label={inboxCount ? `Inbox, ${inboxCount} waiting` : 'Inbox'}
                 className="relative grid size-11 place-items-center rounded-xl bg-surface text-foreground shadow-raised-sm"
               >
                 <Bell className="size-[18px]" />
-                <span className="absolute top-2.5 right-2.5 size-2 rounded-full bg-primary" />
+                {inboxCount > 0 && (
+                  <span className="absolute top-2.5 right-2.5 size-2 rounded-full bg-primary" />
+                )}
               </Link>
               <Avatar initials={toInitials(me.user.fullName)} className="hidden sm:grid" />
             </div>
