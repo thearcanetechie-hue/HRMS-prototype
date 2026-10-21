@@ -87,6 +87,10 @@ model Tenant {
   payrollRuns   PayrollRun[]
   payslips      Payslip[]
   filings       ComplianceFiling[]
+  goals         Goal[]
+  reviewCycles  ReviewCycle[]
+  reviews       Review[]
+  kudos         Kudos[]
 }
 
 model User {
@@ -262,6 +266,11 @@ model Employee {
   expenses    ExpenseClaim[]
   salaries    SalaryStructure[]
   payslips    Payslip[]
+  goals       Goal[]
+  reviews     Review[]          @relation("Reviewee")
+  reviewsGiven Review[]         @relation("Reviewer")
+  kudosSent   Kudos[]           @relation("KudosFrom")
+  kudosReceived Kudos[]         @relation("KudosTo")
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -821,4 +830,102 @@ model ComplianceFiling {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, key, period])
+}
+
+enum GoalStatus {
+  ON_TRACK
+  AT_RISK
+  BEHIND
+  DONE
+}
+
+enum GoalScope {
+  COMPANY
+  TEAM
+  PERSONAL
+}
+
+enum ReviewStage {
+  SELF
+  MANAGER
+  CALIBRATION
+  SHARED
+}
+
+model Goal {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @db.Uuid
+  ownerId     String     @db.Uuid
+  title       String
+  description String?
+  scope       GoalScope  @default(PERSONAL)
+  dueDate     DateTime   @db.Date
+  progress    Int        @default(0)
+  status      GoalStatus @default(ON_TRACK)
+  createdById String?    @db.Uuid
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner  Employee @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scope])
+  @@index([tenantId, ownerId])
+}
+
+model ReviewCycle {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  closesOn  DateTime @db.Date
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  closedAt  DateTime?
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reviews Review[]
+
+  @@unique([tenantId, name])
+}
+
+/// One person's review in a cycle: their self review, then their manager's, then HR calibration.
+model Review {
+  id              String      @id @default(uuid()) @db.Uuid
+  tenantId        String      @db.Uuid
+  cycleId         String      @db.Uuid
+  employeeId      String      @db.Uuid
+  /// Their manager when the cycle started; HR writes it when there is none.
+  reviewerId      String?     @db.Uuid
+  stage           ReviewStage @default(SELF)
+  selfRating      Int?
+  selfComments    String?
+  managerRating   Int?
+  managerComments String?
+  finalRating     Int?
+  updatedAt       DateTime    @updatedAt
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cycle    ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  employee Employee    @relation("Reviewee", fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewer Employee?   @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@unique([cycleId, employeeId])
+  @@index([tenantId, reviewerId])
+}
+
+/// A thank-you from one colleague to another.
+model Kudos {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  fromId    String   @db.Uuid
+  toId      String   @db.Uuid
+  value     String
+  reason    String
+  createdAt DateTime @default(now())
+
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  from   Employee @relation("KudosFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to     Employee @relation("KudosTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
 }
