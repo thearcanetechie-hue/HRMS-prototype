@@ -80,6 +80,9 @@ model Tenant {
   attendance    AttendanceRecord[]
   assets        Asset[]
   assetEvents   AssetEvent[]
+  overtime      OvertimeRequest[]
+  expenses      ExpenseClaim[]
+  claimCategories ClaimCategory[]
 }
 
 model User {
@@ -251,6 +254,8 @@ model Employee {
   leaveRequests LeaveRequest[]
   attendance  AttendanceRecord[]
   assets      Asset[]
+  overtime    OvertimeRequest[]
+  expenses    ExpenseClaim[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -638,4 +643,77 @@ model AssetEvent {
   asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, assetId, at])
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ON_HOLD
+  PAID
+}
+
+/// Extra hours someone worked. Pay is worked out in payroll (2x hourly basic by default).
+model OvertimeRequest {
+  id            String      @id @default(uuid()) @db.Uuid
+  tenantId      String      @db.Uuid
+  employeeId    String      @db.Uuid
+  date          DateTime    @db.Date
+  hours         Decimal     @db.Decimal(4, 1)
+  reason        String
+  status        ClaimStatus @default(PENDING)
+  requestedById String?     @db.Uuid
+  decidedById   String?     @db.Uuid
+  decidedAt     DateTime?
+  decisionNote  String?
+  createdAt     DateTime    @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, employeeId, date])
+}
+
+/// Kinds of expense people can claim, with an optional per-claim limit. HR edits these.
+model ClaimCategory {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  name          String
+  limitPerClaim Int?
+  needsReceipt  Boolean  @default(true)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  claims ExpenseClaim[]
+
+  @@unique([tenantId, name])
+}
+
+model ExpenseClaim {
+  id                String      @id @default(uuid()) @db.Uuid
+  tenantId          String      @db.Uuid
+  employeeId        String      @db.Uuid
+  categoryId        String      @db.Uuid
+  spentOn           DateTime    @db.Date
+  /// Whole rupees.
+  amount            Int
+  description       String
+  /// The receipt, kept in the employee's documents.
+  receiptDocumentId String?     @db.Uuid
+  status            ClaimStatus @default(PENDING)
+  requestedById     String?     @db.Uuid
+  decidedById       String?     @db.Uuid
+  decidedAt         DateTime?
+  decisionNote      String?
+  paidAt            DateTime?
+  createdAt         DateTime    @default(now())
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  category ClaimCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([tenantId, employeeId, spentOn])
 }
