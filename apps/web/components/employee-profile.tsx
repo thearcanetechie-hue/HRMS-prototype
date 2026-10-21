@@ -388,11 +388,7 @@ export function EmployeeProfileView({
             </div>
             <div className="grid content-start gap-5">
               <ProfileChecklistCard employee={employee} canManage={can('lifecycle.manage')} />
-              <ProfileAssetsCard
-                employeeId={employee.id}
-                name={`${employee.firstName} ${employee.lastName}`.trim()}
-                canManage={can('employee.manage')}
-              />
+              <ProfileAssetsCard employeeId={employee.id} canManage={can('employee.manage')} />
               {attendanceCard}
               {leaveCard}
               {documentsCard}

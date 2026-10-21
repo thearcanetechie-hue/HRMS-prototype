@@ -21,6 +21,7 @@ import {
   ASSET_STATUS,
   AssetTile,
   AssignDialog,
+  dateOrDash,
   ReturnDialog,
 } from '@/components/assets';
 import { Avatar } from '@/components/ui/avatar';
@@ -30,20 +31,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Chip } from '@/components/ui/chip';
 import { Dialog } from '@/components/ui/dialog';
-import { DemoBadge, Empty, PageHeader } from '@/components/ui/page';
+import { Banner, Empty, PageHeader } from '@/components/ui/page';
 import { Skeleton } from '@/components/ui/progress';
 import { StatCard } from '@/components/ui/stat-card';
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Tone } from '@/components/ui/tone';
+import { ApiError } from '@/lib/api';
 import {
+  CONDITION_LABEL,
   getAssets,
   setAssetStatus,
   type Asset,
-  type AssetEvent,
   type AssetStatus,
-} from '@/lib/demo/assets';
-import { inr, inrShort } from '@/lib/format';
+} from '@/lib/assets';
+import { formatDate, inr, inrShort } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const GROUPS: [string, string[]][] = [
@@ -54,13 +56,25 @@ const GROUPS: [string, string[]][] = [
   ['Other', ['Headset', 'Furniture', 'Vehicle']],
 ];
 const STATUSES: AssetStatus[] = ['ASSIGNED', 'IN_STOCK', 'IN_REPAIR', 'RETIRED', 'LOST'];
-const EVENT: Record<AssetEvent['kind'], [LucideIcon, Tone]> = {
+const EVENT: Record<string, [LucideIcon, Tone]> = {
   assigned: [UserPlus, 'primary'],
   returned: [RotateCcw, 'success'],
   repair: [Wrench, 'warning'],
+  in_stock: [CheckCircle2, 'success'],
   added: [Plus, 'info'],
+  updated: [Plus, 'info'],
   retired: [Archive, 'detail'],
+  lost: [AlertTriangle, 'danger'],
 };
+const when = (at: string) =>
+  new Date(at).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 
 type Flow = { kind: 'assign' | 'return'; asset: Asset } | { kind: 'add' } | null;
 
@@ -73,9 +87,25 @@ export default function AssetsPage() {
   const [flow, setFlow] = useState<Flow>(null);
   const [toast, showToast] = useToast();
 
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    getAssets().then(setAssets);
+    getAssets()
+      .then(setAssets)
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'Could not load the register.');
+        setAssets([]);
+      });
   }, []);
+
+  /** Runs a status change and reports failures instead of throwing. */
+  async function change(run: () => Promise<Asset>, message: string) {
+    try {
+      replace(await run(), message);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Could not update the asset');
+    }
+  }
 
   function replace(a: Asset, message: string) {
     setAssets((list) =>
@@ -121,11 +151,7 @@ export default function AssetsPage() {
     <>
       <PageHeader
         eyebrow="Workspace"
-        title={
-          <span className="flex flex-wrap items-center gap-3">
-            Assets <DemoBadge />
-          </span>
-        }
+        title="Assets"
         description="Laptops, phones, ID cards and everything else the company hands out, and who holds them."
         actions={
           <>
@@ -138,6 +164,7 @@ export default function AssetsPage() {
           </>
         }
       />
+      {error && <Banner>{error}</Banner>}
 
       <div className="grid gap-5">
         <div className="grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
@@ -194,7 +221,7 @@ export default function AssetsPage() {
                   <div className="min-w-0 grow">
                     <div className="truncate font-semibold">{a.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {a.holder?.name} · last day {a.holder?.leaving}
+                      {a.holder?.name} · last day {dateOrDash(a.holder?.leaving ?? null)}
                     </div>
                   </div>
                   <Button size="sm" onClick={() => setFlow({ kind: 'return', asset: a })}>
@@ -289,15 +316,18 @@ export default function AssetsPage() {
                       <TD>
                         {a.holder ? (
                           <span className="flex items-center gap-2 whitespace-nowrap">
-                            <Avatar initials={a.holder.initials} className="size-7 text-[10px]" />
+                            <Avatar
+                              initials={initialsOf(a.holder.name)}
+                              className="size-7 text-[10px]"
+                            />
                             {a.holder.name}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">–</span>
                         )}
                       </TD>
-                      <TD className="whitespace-nowrap">{a.since ?? '–'}</TD>
-                      <TD>{a.condition}</TD>
+                      <TD className="whitespace-nowrap">{dateOrDash(a.since)}</TD>
+                      <TD>{CONDITION_LABEL[a.condition]}</TD>
                       <TD>
                         <Badge tone={ASSET_STATUS[a.status][1]}>{ASSET_STATUS[a.status][0]}</Badge>
                       </TD>
@@ -325,12 +355,12 @@ export default function AssetsPage() {
 
               {selected.holder && (
                 <div className="mb-4 flex items-center gap-3 rounded-[14px] bg-surface-2/70 p-3">
-                  <Avatar size="sm" initials={selected.holder.initials} />
+                  <Avatar size="sm" initials={initialsOf(selected.holder.name)} />
                   <div className="min-w-0 grow">
                     <div className="font-bold">
-                      {selected.holder.employeeId ? (
+                      {selected.holder.id ? (
                         <Link
-                          href={`/employees/${selected.holder.employeeId}`}
+                          href={`/employees/${selected.holder.id}`}
                           className="text-inherit no-underline"
                         >
                           {selected.holder.name}
@@ -341,8 +371,10 @@ export default function AssetsPage() {
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {selected.holder.code ? `${selected.holder.code} · ` : ''}since{' '}
-                      {selected.since}
-                      {selected.holder.leaving ? ` · leaves ${selected.holder.leaving}` : ''}
+                      {dateOrDash(selected.since)}
+                      {selected.holder.leaving
+                        ? ` · leaves ${formatDate(selected.holder.leaving)}`
+                        : ''}
                     </div>
                   </div>
                 </div>
@@ -353,11 +385,14 @@ export default function AssetsPage() {
                   [
                     ['Type', selected.category],
                     ['Serial number', selected.serial],
-                    ['Location', selected.location],
-                    ['Bought on', selected.purchasedOn],
+                    ['Location', selected.location ?? '–'],
+                    ['Bought on', dateOrDash(selected.purchasedOn)],
                     ['Cost', inr(selected.cost)],
-                    ['Warranty until', selected.warrantyUntil ?? 'None'],
-                    ['Condition', selected.condition],
+                    [
+                      'Warranty until',
+                      selected.warrantyUntil ? formatDate(selected.warrantyUntil) : 'None',
+                    ],
+                    ['Condition', CONDITION_LABEL[selected.condition]],
                   ] as const
                 ).map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-3">
@@ -394,11 +429,8 @@ export default function AssetsPage() {
                 {selected.status === 'IN_REPAIR' && (
                   <Button
                     variant="primary"
-                    onClick={async () =>
-                      replace(
-                        await setAssetStatus(selected.id, 'IN_STOCK', 'repaired'),
-                        'Back in stock',
-                      )
+                    onClick={() =>
+                      change(() => setAssetStatus(selected.id, 'IN_STOCK'), 'Back in stock')
                     }
                   >
                     <CheckCircle2 /> Repaired, back in stock
@@ -407,24 +439,57 @@ export default function AssetsPage() {
                 {(selected.status === 'IN_STOCK' || selected.status === 'ASSIGNED') && (
                   <div className="grid grid-cols-2 gap-2.5">
                     <Button
-                      onClick={async () =>
-                        replace(await setAssetStatus(selected.id, 'IN_REPAIR'), 'Sent for repair')
-                      }
+                      onClick={() => {
+                        if (
+                          selected.status === 'ASSIGNED' &&
+                          !window.confirm(
+                            `Send ${selected.name} for repair? It comes back from ${selected.holder?.name}.`,
+                          )
+                        )
+                          return;
+                        void change(
+                          () => setAssetStatus(selected.id, 'IN_REPAIR'),
+                          'Sent for repair',
+                        );
+                      }}
                     >
                       <Wrench /> Repair
                     </Button>
-                    <Button
-                      onClick={async () => {
-                        if (
-                          !window.confirm(`Retire ${selected.name}? It leaves the active register.`)
-                        )
-                          return;
-                        replace(await setAssetStatus(selected.id, 'RETIRED'), 'Retired');
-                      }}
-                    >
-                      <Archive /> Retire
-                    </Button>
+                    {selected.status === 'IN_STOCK' ? (
+                      <Button
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `Retire ${selected.name}? It leaves the active register.`,
+                            )
+                          )
+                            return;
+                          void change(() => setAssetStatus(selected.id, 'RETIRED'), 'Retired');
+                        }}
+                      >
+                        <Archive /> Retire
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="danger"
+                        onClick={() => {
+                          if (!window.confirm(`Mark ${selected.name} as lost?`)) return;
+                          void change(() => setAssetStatus(selected.id, 'LOST'), 'Marked as lost');
+                        }}
+                      >
+                        <AlertTriangle /> Lost
+                      </Button>
+                    )}
                   </div>
+                )}
+                {selected.status === 'LOST' && (
+                  <Button
+                    onClick={() =>
+                      change(() => setAssetStatus(selected.id, 'IN_STOCK'), 'Found, back in stock')
+                    }
+                  >
+                    <CheckCircle2 /> Found, back in stock
+                  </Button>
                 )}
               </div>
 
@@ -432,11 +497,16 @@ export default function AssetsPage() {
                 History
               </h4>
               <ul className="grid gap-3.5">
-                {selected.history.map((e, i) => {
-                  const [Icon, tone] = EVENT[e.kind];
+                {selected.history.map((e) => {
+                  const [Icon, tone] = EVENT[e.kind] ?? EVENT.updated!;
                   return (
-                    <li key={i}>
-                      <ActivityItem icon={<Icon />} tone={tone} title={e.text} caption={e.at} />
+                    <li key={e.id}>
+                      <ActivityItem
+                        icon={<Icon />}
+                        tone={tone}
+                        title={e.text}
+                        caption={when(e.at)}
+                      />
                     </li>
                   );
                 })}
@@ -468,3 +538,11 @@ export default function AssetsPage() {
     </>
   );
 }
+
+const initialsOf = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();

@@ -7,6 +7,7 @@ import {
   Headphones,
   IdCard,
   Laptop,
+  Loader2,
   Monitor,
   Smartphone,
   type LucideIcon,
@@ -18,22 +19,23 @@ import { Button } from './ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { DialogClose, DialogContent } from './ui/dialog';
 import { Field, FormError, Input, Select } from './ui/input';
-import { DemoBadge, IconTile } from './ui/page';
+import { IconTile } from './ui/page';
 import { Skeleton } from './ui/progress';
 import type { Tone } from './ui/tone';
-import { api, type Employee, type Paged } from '@/lib/api';
+import { api, ApiError, type Employee, type Paged } from '@/lib/api';
 import {
   addAsset,
   ASSET_CATEGORIES,
   assignAsset,
+  CONDITION_LABEL,
   getAssetsFor,
   returnAsset,
   type Asset,
   type AssetCategory,
   type AssetCondition,
   type AssetStatus,
-} from '@/lib/demo/assets';
-import { initials } from '@/lib/format';
+} from '@/lib/assets';
+import { formatDate } from '@/lib/format';
 
 export const ASSET_ICON: Record<AssetCategory, LucideIcon> = {
   Laptop,
@@ -67,6 +69,8 @@ export const ASSET_STATUS: Record<AssetStatus, [string, BadgeTone]> = {
   LOST: ['Lost', 'danger'],
 };
 
+export const dateOrDash = (iso: string | null) => (iso ? formatDate(iso) : '–');
+
 export function AssetTile({
   category,
   size = 36,
@@ -74,21 +78,25 @@ export function AssetTile({
   category: AssetCategory;
   size?: 32 | 36 | 40 | 44;
 }) {
-  const Icon = ASSET_ICON[category];
+  const Icon = ASSET_ICON[category] ?? Laptop;
   return (
-    <IconTile tone={ASSET_TONE[category]} size={size}>
+    <IconTile tone={ASSET_TONE[category] ?? 'primary'} size={size}>
       <Icon />
     </IconTile>
   );
 }
 
-const CONDITIONS: AssetCondition[] = ['New', 'Good', 'Fair', 'Damaged'];
+const CONDITIONS = Object.keys(CONDITION_LABEL) as AssetCondition[];
+const errorText = (err: unknown, fallback: string) =>
+  err instanceof ApiError ? err.message : fallback;
 
-/** Hand an asset to someone (people come from the real employee list). */
+/** Hand an asset to someone. */
 export function AssignDialog({ asset, onDone }: { asset: Asset; onDone: (a: Asset) => void }) {
   const [people, setPeople] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState('');
   const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api<Paged<Employee>>('/employees?pageSize=100')
@@ -97,25 +105,18 @@ export function AssignDialog({ asset, onDone }: { asset: Asset; onDone: (a: Asse
         setPeople(list);
         setEmployeeId(list[0]?.id ?? '');
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load employees.'));
   }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const p = people.find((x) => x.id === employeeId);
-    if (!p) return;
-    onDone(
-      await assignAsset(
-        asset.id,
-        {
-          employeeId: p.id,
-          name: `${p.firstName} ${p.lastName}`.trim(),
-          initials: initials(p.firstName, p.lastName),
-          code: p.employeeCode,
-        },
-        note.trim() || undefined,
-      ),
-    );
+    setBusy(true);
+    try {
+      onDone(await assignAsset(asset.id, employeeId, note.trim()));
+    } catch (err) {
+      setError(errorText(err, 'Could not assign'));
+      setBusy(false);
+    }
   }
 
   return (
@@ -138,8 +139,10 @@ export function AssignDialog({ asset, onDone }: { asset: Asset; onDone: (a: Asse
             placeholder="With charger and bag"
           />
         </Field>
+        <FormError>{error}</FormError>
         <div className="flex gap-3">
-          <Button variant="primary" type="submit" disabled={!employeeId}>
+          <Button variant="primary" type="submit" disabled={!employeeId || busy}>
+            {busy && <Loader2 className="animate-spin" />}
             Assign
           </Button>
           <DialogClose asChild>
@@ -154,15 +157,24 @@ export function AssignDialog({ asset, onDone }: { asset: Asset; onDone: (a: Asse
 /** Take an asset back and record the condition it came back in. */
 export function ReturnDialog({ asset, onDone }: { asset: Asset; onDone: (a: Asset) => void }) {
   const [condition, setCondition] = useState<AssetCondition>(
-    asset.condition === 'New' ? 'Good' : asset.condition,
+    asset.condition === 'NEW' ? 'GOOD' : asset.condition,
   );
   const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
   return (
     <DialogContent title={`Return ${asset.name}`} aria-describedby={undefined}>
       <form
         onSubmit={async (e) => {
           e.preventDefault();
-          onDone(await returnAsset(asset.id, condition, note.trim() || undefined));
+          setBusy(true);
+          try {
+            onDone(await returnAsset(asset.id, condition, note.trim()));
+          } catch (err) {
+            setError(errorText(err, 'Could not record the return'));
+            setBusy(false);
+          }
         }}
         className="grid gap-4"
       >
@@ -176,7 +188,9 @@ export function ReturnDialog({ asset, onDone }: { asset: Asset; onDone: (a: Asse
             onChange={(e) => setCondition(e.target.value as AssetCondition)}
           >
             {CONDITIONS.map((c) => (
-              <option key={c}>{c}</option>
+              <option key={c} value={c}>
+                {CONDITION_LABEL[c]}
+              </option>
             ))}
           </Select>
         </Field>
@@ -188,8 +202,10 @@ export function ReturnDialog({ asset, onDone }: { asset: Asset; onDone: (a: Asse
             placeholder="Charger missing"
           />
         </Field>
+        <FormError>{error}</FormError>
         <div className="flex gap-3">
-          <Button variant="primary" type="submit">
+          <Button variant="primary" type="submit" disabled={busy}>
+            {busy && <Loader2 className="animate-spin" />}
             Mark as returned
           </Button>
           <DialogClose asChild>
@@ -210,24 +226,29 @@ export function AddAssetDialog({ onDone }: { onDone: (a: Asset) => void }) {
   const [warranty, setWarranty] = useState('');
   const [location, setLocation] = useState('');
   const [error, setError] = useState('');
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const [busy, setBusy] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim() || !serial.trim()) return setError('Add a name and a serial number.');
-    onDone(
-      await addAsset({
-        name: name.trim(),
-        category,
-        serial: serial.trim(),
-        purchasedOn: fmt(purchasedOn),
-        cost: Number(cost) || 0,
-        warrantyUntil: warranty ? fmt(warranty) : null,
-        location: location.trim() || 'Head office',
-        condition: 'New',
-      }),
-    );
+    setBusy(true);
+    setError('');
+    try {
+      onDone(
+        await addAsset({
+          name: name.trim(),
+          category,
+          serial: serial.trim(),
+          purchasedOn: purchasedOn || null,
+          cost: Number(cost) || 0,
+          warrantyUntil: warranty || null,
+          location: location.trim() || null,
+        }),
+      );
+    } catch (err) {
+      setError(errorText(err, 'Could not add the asset'));
+      setBusy(false);
+    }
   }
 
   return (
@@ -297,7 +318,8 @@ export function AddAssetDialog({ onDone }: { onDone: (a: Asset) => void }) {
           <FormError>{error}</FormError>
         </div>
         <div className="flex gap-3 sm:col-span-2">
-          <Button variant="primary" type="submit">
+          <Button variant="primary" type="submit" disabled={busy}>
+            {busy && <Loader2 className="animate-spin" />}
             Add to register
           </Button>
           <DialogClose asChild>
@@ -312,18 +334,20 @@ export function AddAssetDialog({ onDone }: { onDone: (a: Asset) => void }) {
 /** Card on a person's page listing what they hold. */
 export function ProfileAssetsCard({
   employeeId,
-  name,
   canManage,
 }: {
   employeeId: string;
-  name: string;
   canManage: boolean;
 }) {
   const [items, setItems] = useState<Asset[] | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
-    getAssetsFor(employeeId, name).then(setItems);
-  }, [employeeId, name]);
+    getAssetsFor(employeeId)
+      .then(setItems)
+      .catch(() => setFailed(true));
+  }, [employeeId]);
 
+  if (failed) return null;
   return (
     <Card>
       <CardHeader>
@@ -333,7 +357,6 @@ export function ProfileAssetsCard({
             {items ? `${items.length} ${items.length === 1 ? 'item' : 'items'} held` : 'Loading…'}
           </CardDescription>
         </div>
-        <DemoBadge />
       </CardHeader>
       {!items ? (
         <Skeleton className="h-24" />
@@ -347,7 +370,7 @@ export function ProfileAssetsCard({
               <div className="min-w-0 grow">
                 <div className="truncate font-semibold">{a.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  <span className="font-mono">{a.tag}</span> · since {a.since}
+                  <span className="font-mono">{a.tag}</span> · since {dateOrDash(a.since)}
                 </div>
               </div>
               <Badge tone={ASSET_STATUS[a.status][1]}>{ASSET_STATUS[a.status][0]}</Badge>
