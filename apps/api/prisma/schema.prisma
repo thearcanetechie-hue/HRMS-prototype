@@ -83,6 +83,10 @@ model Tenant {
   overtime      OvertimeRequest[]
   expenses      ExpenseClaim[]
   claimCategories ClaimCategory[]
+  salaries      SalaryStructure[]
+  payrollRuns   PayrollRun[]
+  payslips      Payslip[]
+  filings       ComplianceFiling[]
 }
 
 model User {
@@ -256,6 +260,8 @@ model Employee {
   assets      Asset[]
   overtime    OvertimeRequest[]
   expenses    ExpenseClaim[]
+  salaries    SalaryStructure[]
+  payslips    Payslip[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -716,4 +722,103 @@ model ExpenseClaim {
 
   @@index([tenantId, status])
   @@index([tenantId, employeeId, spentOn])
+}
+
+enum PayrollStatus {
+  DRAFT
+  LOCKED
+  PAID
+}
+
+/// Someone's pay from a date. The newest one on or before a month is used for that month.
+model SalaryStructure {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  employeeId    String   @db.Uuid
+  annualCtc     Int
+  basicPercent  Int      @default(50)
+  metro         Boolean  @default(false)
+  effectiveFrom DateTime @db.Date
+  createdById   String?  @db.Uuid
+  createdAt     DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, effectiveFrom])
+  @@index([tenantId, employeeId])
+}
+
+/// One month's payroll. DRAFT can be recalculated; LOCKED is final for review; PAID closes it.
+model PayrollRun {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @db.Uuid
+  /// YYYY-MM
+  month     String
+  status    PayrollStatus @default(DRAFT)
+  gross     Int           @default(0)
+  net       Int           @default(0)
+  /// Employee and employer PF + ESI, PT and TDS.
+  statutory Int           @default(0)
+  ctc       Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  lockedAt  DateTime?
+  paidAt    DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payslips Payslip[]
+
+  @@unique([tenantId, month])
+}
+
+model Payslip {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  runId        String   @db.Uuid
+  employeeId   String   @db.Uuid
+  /// [{ key, label, amount, kind }]
+  lines        Json
+  gross        Int
+  deductions   Int
+  net          Int
+  pf           Int      @default(0)
+  esi          Int      @default(0)
+  pt           Int      @default(0)
+  tds          Int      @default(0)
+  employerPf   Int      @default(0)
+  employerEsi  Int      @default(0)
+  reimbursements Int    @default(0)
+  payableDays  Decimal  @db.Decimal(5, 1)
+  daysInMonth  Int
+  lopDays      Decimal  @default(0) @db.Decimal(5, 1)
+  overtimeHours Decimal @default(0) @db.Decimal(5, 1)
+  /// [{ tag, reason, tone }] things HR should check before locking.
+  flags        Json     @default("[]")
+  reviewed     Boolean  @default(false)
+  /// Claims and overtime this payslip pays, marked paid when the run is paid.
+  claimIds     String[] @db.Uuid
+  overtimeIds  String[] @db.Uuid
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, employeeId])
+  @@index([tenantId, employeeId])
+}
+
+/// A statutory return or payment marked done (PF ECR, ESI, PT, TDS…).
+model ComplianceFiling {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  key       String
+  period    String
+  reference String?
+  filedById String?  @db.Uuid
+  filedAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key, period])
 }

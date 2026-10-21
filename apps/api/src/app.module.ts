@@ -6,6 +6,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { AssetsModule } from './assets/assets.module';
 import { ClaimsModule } from './claims/claims.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthGuard } from './auth/auth.guard';
@@ -37,6 +38,7 @@ import { RolesModule } from './roles/roles.module';
     AssetsModule,
     DashboardModule,
     ClaimsModule,
+    PayrollModule,
   ],
   controllers: [HealthController],
   providers: [

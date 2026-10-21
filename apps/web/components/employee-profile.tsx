@@ -31,7 +31,7 @@ import { DemoBadge, IconTile } from './ui/page';
 import { ProgressBar, Skeleton } from './ui/progress';
 import { ProgressRing } from './ui/progress-ring';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import type { Employee, IdentifierKey, Profile } from '@/lib/api';
+import { api, type Employee, type IdentifierKey, type Profile, type SalaryInfo } from '@/lib/api';
 import { getProfileExtras, type ProfileExtras } from '@/lib/demo/profile';
 import { formatDate, initials, inr, STATUS_TONE, titleCase } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -87,9 +87,16 @@ export function EmployeeProfileView({
   const [editing, setEditing] = useState(false);
   const name = `${employee.firstName} ${employee.lastName}`.trim();
 
+  const [salary, setSalary] = useState<SalaryInfo | null>(null);
+
   useEffect(() => {
     getProfileExtras(employee.id).then(setExtras);
-  }, [employee.id]);
+    // Salary is shown to the person and to payroll; for anyone else the request is refused.
+    if (self || can('payroll.manage'))
+      api<{ current: SalaryInfo | null }>(`/payroll/salaries/${employee.id}`)
+        .then((r) => setSalary(r.current))
+        .catch(() => setSalary(null));
+  }, [employee.id, self, can]);
 
   const meta: [typeof Hash, string | null | undefined][] = [
     [Hash, employee.employeeCode],
@@ -121,10 +128,13 @@ export function EmployeeProfileView({
     ['Designation', employee.designation?.name],
     ['Employment type', employee.employmentType && titleCase(employee.employmentType)],
     ['Work location', employee.location?.name],
-    ['Annual CTC', extras && inr(extras.pay.ctc)],
-    ['Pay group', extras?.pay.payGroup],
-    ['Shift', extras?.pay.shift],
-    ['Notice period', extras && `${extras.pay.noticeDays} days`],
+    ...(salary
+      ? ([
+          ['Annual CTC', inr(salary.annualCtc)],
+          ['Monthly gross', inr(salary.monthlyGross)],
+          ['Salary from', formatDate(salary.effectiveFrom)],
+        ] as KV[])
+      : []),
   ];
 
   const personalCard = (
@@ -149,7 +159,6 @@ export function EmployeeProfileView({
     <Card>
       <CardHeader>
         <CardTitle>Job & pay</CardTitle>
-        <DemoBadge />
       </CardHeader>
       <KeyValues items={job} />
     </Card>
