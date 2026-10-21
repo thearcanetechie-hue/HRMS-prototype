@@ -602,3 +602,79 @@ export interface KudosData {
   }[];
   top: { employee: PerfPerson; count: number; latest: string }[];
 }
+
+export type CourseMode = 'GOOGLE_MEET' | 'ZOOM' | 'TEAMS' | 'IN_PERSON' | 'SELF_PACED';
+
+export interface CourseItem {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  lead: PerfPerson | null;
+  leadId: string | null;
+  department: { id: string; name: string } | null;
+  mandatory: boolean;
+  seats: number | null;
+  startsOn: string;
+  endsOn: string;
+  hours: number;
+  mode: CourseMode;
+  meetingLink: string | null;
+  status: 'UPCOMING' | 'ONGOING' | 'COMPLETED';
+  registered: number;
+  done: number;
+  inProgress: number;
+  notStarted: number;
+  avg: number;
+  mine: { id: string; progress: number } | null;
+  canManage: boolean;
+  canEnroll: boolean;
+}
+
+export interface CourseSessionItem {
+  id: string;
+  courseId: string;
+  title: string;
+  course: string;
+  startsAt: string;
+  minutes: number;
+  location: string | null;
+  mode: CourseMode;
+  meetingLink: string | null;
+}
+
+export interface LearningOverview {
+  courses: CourseItem[];
+  sessions: CourseSessionItem[];
+  stats: {
+    running: number;
+    mandatory: number;
+    registrations: number;
+    registrationsThisMonth: number;
+    completionPct: number | null;
+    hours: number;
+  };
+  canManage: boolean;
+  selfEmployeeId: string | null;
+}
+
+export interface LearnerItem {
+  id: string;
+  employee: PerfPerson;
+  progress: number;
+  completedAt: string | null;
+  canUpdate: boolean;
+}
+
+export interface MyCourse {
+  id: string;
+  progress: number;
+  completedAt: string | null;
+  course: {
+    id: string;
+    title: string;
+    mandatory: boolean;
+    endsOn: string;
+    status: CourseItem['status'];
+  };
+}
