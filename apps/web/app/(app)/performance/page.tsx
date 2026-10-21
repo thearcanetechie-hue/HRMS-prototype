@@ -58,7 +58,7 @@ const STAGE: Record<ReviewItem['stage'], [string, BadgeTone]> = {
   CALIBRATION: ['Calibration', 'info'],
   SHARED: ['Shared', 'success'],
 };
-export const RATINGS = [
+const RATINGS = [
   '',
   'Needs improvement',
   'Developing',
