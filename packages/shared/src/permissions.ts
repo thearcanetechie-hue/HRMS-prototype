@@ -24,6 +24,7 @@ export const PERMISSIONS = {
   'claims.manage': 'Decide any overtime or expense claim, mark claims paid and set claim limits',
   'payroll.manage': "Set salaries, run payroll, see everyone's payslips and mark statutory filings",
   'performance.manage': 'Run review cycles, see every goal and review, and calibrate ratings',
+  'learning.manage': "Create courses, enrol people and see everyone's progress",
   'audit.read': 'View the audit log',
 } as const;
 
@@ -60,6 +61,7 @@ export const SYSTEM_ROLES: Record<
       'claims.manage',
       'payroll.manage',
       'performance.manage',
+      'learning.manage',
       'audit.read',
     ],
   },

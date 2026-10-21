@@ -35,6 +35,7 @@ import {
   api,
   type Employee,
   type GoalItem,
+  type MyCourse,
   type IdentifierKey,
   type Profile,
   type ReviewItem,
@@ -235,7 +236,12 @@ export function EmployeeProfileView({
 
   const documentsCard = <EmployeeDocumentsCard employeeId={employee.id} self={self} />;
 
-  const performanceCard = <EmployeePerformanceCard employeeId={employee.id} />;
+  const performanceCard = (
+    <div className="grid content-start gap-5">
+      <EmployeePerformanceCard employeeId={employee.id} />
+      <EmployeeLearningCard employeeId={employee.id} />
+    </div>
+  );
 
   return (
     <>
@@ -436,6 +442,50 @@ function EmployeePerformanceCard({ employeeId }: { employeeId: string }) {
         </ul>
       ) : (
         <p className="text-muted-foreground">No goals set yet.</p>
+      )}
+    </Card>
+  );
+}
+
+function EmployeeLearningCard({ employeeId }: { employeeId: string }) {
+  const [courses, setCourses] = useState<MyCourse[] | null>(null);
+  useEffect(() => {
+    api<MyCourse[]>(`/learning/employees/${employeeId}`)
+      .then(setCourses)
+      .catch(() => setCourses([]));
+  }, [employeeId]);
+  if (courses && !courses.length) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Learning</CardTitle>
+          <CardDescription>
+            {courses
+              ? `${courses.filter((c) => c.progress >= 100).length} of ${courses.length} courses done`
+              : 'Courses'}
+          </CardDescription>
+        </div>
+      </CardHeader>
+      {!courses ? (
+        <Skeleton className="h-20" />
+      ) : (
+        <ul className="grid gap-3.5">
+          {courses.map((c) => (
+            <li key={c.id} className="grid gap-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="font-semibold">
+                  {c.course.title}
+                  {c.course.mandatory && (
+                    <span className="ml-1.5 text-xs text-warning">Mandatory</span>
+                  )}
+                </span>
+                <span className="font-mono text-[13px] text-muted-foreground">{c.progress}%</span>
+              </div>
+              <ProgressBar value={c.progress} tone={c.progress >= 100 ? 'success' : 'primary'} />
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );
