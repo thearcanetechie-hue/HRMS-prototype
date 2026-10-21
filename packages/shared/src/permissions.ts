@@ -25,6 +25,8 @@ export const PERMISSIONS = {
   'payroll.manage': "Set salaries, run payroll, see everyone's payslips and mark statutory filings",
   'performance.manage': 'Run review cycles, see every goal and review, and calibrate ratings',
   'learning.manage': "Create courses, enrol people and see everyone's progress",
+  'engagement.manage':
+    'Post announcements and events, pin or remove posts, and run polls and pulse surveys',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -62,6 +64,7 @@ export const SYSTEM_ROLES: Record<
       'payroll.manage',
       'performance.manage',
       'learning.manage',
+      'engagement.manage',
       'audit.read',
     ],
   },

@@ -743,3 +743,46 @@ export type CourseSessionInput = z.infer<typeof courseSessionSchema>;
 
 export const enrollSchema = z.object({ employeeIds: z.array(z.string().uuid()).min(1).max(500) });
 export const progressSchema = z.object({ progress: z.number().int().min(0).max(100) });
+
+export const POST_KINDS = ['UPDATE', 'WIN', 'ANNOUNCEMENT', 'EVENT'] as const;
+export const postSchema = z
+  .object({
+    kind: z.enum(POST_KINDS).default('UPDATE'),
+    body: z.string().trim().min(1).max(3000),
+    /** Leave empty for everyone. */
+    departmentId: z.string().uuid().nullish(),
+    eventTitle: z.string().trim().min(2).max(120).nullish(),
+    eventStartsAt: z.string().datetime({ offset: true }).nullish(),
+    eventEndsAt: z.string().datetime({ offset: true }).nullish(),
+    eventLocation: z.string().trim().max(200).nullish(),
+  })
+  .refine((p) => p.kind !== 'EVENT' || (p.eventTitle && p.eventStartsAt), {
+    message: 'An event needs a title and a start time',
+    path: ['eventTitle'],
+  });
+export type PostInput = z.infer<typeof postSchema>;
+
+export const commentSchema = z.object({ body: z.string().trim().min(1).max(1000) });
+export const rsvpSchema = z.object({ answer: z.enum(['GOING', 'MAYBE', 'NOT_GOING']) });
+
+export const pollSchema = z.object({
+  question: z.string().trim().min(4).max(200),
+  options: z.array(z.string().trim().min(1).max(80)).min(2).max(6),
+  closesOn: isoDate,
+});
+export type PollInput = z.infer<typeof pollSchema>;
+
+export const pulseSurveySchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  closesOn: isoDate,
+});
+export type PulseSurveyInput = z.infer<typeof pulseSurveySchema>;
+
+export const pulseResponseSchema = z.object({
+  score: z.number().int().min(0).max(10),
+  recognised: z.boolean(),
+  managerSupport: z.boolean(),
+  workloadFair: z.boolean(),
+  comment: z.string().trim().max(1000).nullish(),
+});
+export type PulseResponseInput = z.infer<typeof pulseResponseSchema>;
