@@ -333,7 +333,15 @@ export class EngagementService {
       this.celebrations(),
       this.trending(v),
     ]);
-    return { pulse, poll, celebrations, trending, canManage: v.manage, selfEmployeeId: v.self };
+    return {
+      pulse,
+      poll,
+      celebrations,
+      trending,
+      canManage: v.manage,
+      selfEmployeeId: v.self,
+      departmentId: v.departmentId,
+    };
   }
 
   private async pulseSummary(v: Viewer) {

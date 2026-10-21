@@ -678,3 +678,85 @@ export interface MyCourse {
     status: CourseItem['status'];
   };
 }
+
+export interface FeedPerson extends PerfPerson {
+  designation: { name: string } | null;
+}
+
+export interface FeedPost {
+  id: string;
+  kind: 'UPDATE' | 'WIN' | 'ANNOUNCEMENT' | 'KUDOS' | 'EVENT';
+  body: string;
+  author: FeedPerson;
+  department: { id: string; name: string } | null;
+  pinned: boolean;
+  createdAt: string;
+  kudos: { value: string; to: FeedPerson } | null;
+  event: {
+    title: string;
+    startsAt: string;
+    endsAt: string | null;
+    location: string | null;
+    going: number;
+    maybe: number;
+    mine: 'GOING' | 'MAYBE' | 'NOT_GOING' | null;
+  } | null;
+  reactions: number;
+  comments: number;
+  liked: boolean;
+  canDelete: boolean;
+}
+
+export interface FeedPage {
+  posts: FeedPost[];
+  nextBefore: string | null;
+}
+
+export interface FeedComment {
+  id: string;
+  body: string;
+  author: FeedPerson;
+  createdAt: string;
+  canDelete: boolean;
+}
+
+export interface PulseSummary {
+  id: string;
+  name: string;
+  closesOn: string;
+  active: boolean;
+  replies: number;
+  invited: number;
+  answered: boolean;
+  minResponses: number;
+  score: number | null;
+  items: { label: string; pct: number }[];
+  comments: string[];
+}
+
+export interface PollSummary {
+  id: string;
+  question: string;
+  closesOn: string;
+  open: boolean;
+  votes: number;
+  voted: string | null;
+  options: { id: string; label: string; votes: number; pct: number }[];
+}
+
+export interface Celebration {
+  kind: 'BIRTHDAY' | 'ANNIVERSARY' | 'JOINED';
+  employee: FeedPerson;
+  on: string;
+  caption: string;
+}
+
+export interface EngagementSidebar {
+  pulse: PulseSummary | null;
+  poll: PollSummary | null;
+  celebrations: Celebration[];
+  trending: string[];
+  canManage: boolean;
+  selfEmployeeId: string | null;
+  departmentId: string | null;
+}
