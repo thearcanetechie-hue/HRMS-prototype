@@ -366,6 +366,16 @@ export class PerformanceService {
         reason: input.reason,
       },
     });
+    // Kudos also go on the company feed.
+    await this.prisma.db.post.create({
+      data: {
+        tenantId: requireTenantId(),
+        authorId: v.self,
+        kind: 'KUDOS',
+        body: input.reason,
+        kudosId: k.id,
+      },
+    });
     await this.audit.record('performance.kudos', 'Kudos', k.id, { employeeId: input.toId });
     return k;
   }

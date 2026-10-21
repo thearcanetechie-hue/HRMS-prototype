@@ -147,6 +147,8 @@ function describe(
       return `${by} gave ${them} a company asset`;
     case 'asset.returned':
       return `${them} returned a company asset · ${String(data.condition ?? '').toLowerCase()}`;
+    case 'performance.kudos':
+      return `${by} thanked ${them}`;
     case 'learning.completed':
       return `${them} completed ${String(data.course ?? 'a course')}`;
     case 'learning.enrolled':

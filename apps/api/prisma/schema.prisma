@@ -94,6 +94,16 @@ model Tenant {
   courses       Course[]
   courseSessions CourseSession[]
   enrollments   Enrollment[]
+  posts         Post[]
+  postReactions PostReaction[]
+  postComments  PostComment[]
+  eventRsvps    EventRsvp[]
+  polls         Poll[]
+  pollOptions   PollOption[]
+  pollVotes     PollVote[]
+  pulseSurveys  PulseSurvey[]
+  pulseParticipants PulseParticipant[]
+  pulseResponses PulseResponse[]
 }
 
 model User {
@@ -206,6 +216,7 @@ model Department {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   courses   Course[]
+  posts     Post[]
 
   tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
@@ -277,6 +288,12 @@ model Employee {
   kudosReceived Kudos[]         @relation("KudosTo")
   coursesLed    Course[]          @relation("CourseLead")
   enrollments   Enrollment[]
+  posts         Post[]
+  postReactions PostReaction[]
+  postComments  PostComment[]
+  eventRsvps    EventRsvp[]
+  pollVotes     PollVote[]
+  pulseParticipations PulseParticipant[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -930,6 +947,7 @@ model Kudos {
   createdAt DateTime @default(now())
 
   tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  post   Post?
   from   Employee @relation("KudosFrom", fields: [fromId], references: [id], onDelete: Cascade)
   to     Employee @relation("KudosTo", fields: [toId], references: [id], onDelete: Cascade)
 
@@ -1004,4 +1022,179 @@ model Enrollment {
 
   @@unique([courseId, employeeId])
   @@index([tenantId, employeeId])
+}
+
+enum PostKind {
+  UPDATE
+  WIN
+  ANNOUNCEMENT
+  KUDOS
+  EVENT
+}
+
+enum RsvpAnswer {
+  GOING
+  MAYBE
+  NOT_GOING
+}
+
+/// A post on the company feed. Kudos posts point at the Kudos row; event posts carry the event.
+model Post {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @db.Uuid
+  authorId      String    @db.Uuid
+  kind          PostKind  @default(UPDATE)
+  body          String
+  /// Null means everyone; otherwise one department.
+  departmentId  String?   @db.Uuid
+  kudosId       String?   @unique @db.Uuid
+  eventTitle    String?
+  eventStartsAt DateTime?
+  eventEndsAt   DateTime?
+  eventLocation String?
+  pinned        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  author     Employee       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  department Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  kudos      Kudos?         @relation(fields: [kudosId], references: [id], onDelete: Cascade)
+  reactions  PostReaction[]
+  comments   PostComment[]
+  rsvps      EventRsvp[]
+
+  @@index([tenantId, createdAt])
+}
+
+model PostReaction {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  postId     String   @db.Uuid
+  employeeId String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  post     Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, employeeId])
+}
+
+model PostComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  postId    String   @db.Uuid
+  authorId  String   @db.Uuid
+  body      String
+  createdAt DateTime @default(now())
+
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  post   Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author Employee @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+}
+
+model EventRsvp {
+  id         String     @id @default(uuid()) @db.Uuid
+  tenantId   String     @db.Uuid
+  postId     String     @db.Uuid
+  employeeId String     @db.Uuid
+  answer     RsvpAnswer
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  post     Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, employeeId])
+}
+
+/// A quick poll. Who voted is stored only to stop double votes; results are counts.
+model Poll {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  question    String
+  closesOn    DateTime @db.Date
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  options PollOption[]
+  votes   PollVote[]
+
+  @@index([tenantId, closesOn])
+}
+
+model PollOption {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  pollId   String @db.Uuid
+  label    String
+  position Int
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes  PollVote[]
+}
+
+model PollVote {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  pollId     String   @db.Uuid
+  optionId   String   @db.Uuid
+  employeeId String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  poll     Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, employeeId])
+}
+
+/// An anonymous pulse survey. Who took part and what was answered live in separate tables
+/// with no link between them, so an answer can't be traced back to a person.
+model PulseSurvey {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  closesOn  DateTime @db.Date
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  participants PulseParticipant[]
+  responses    PulseResponse[]
+}
+
+model PulseParticipant {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @db.Uuid
+  surveyId   String @db.Uuid
+  employeeId String @db.Uuid
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  survey   PulseSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  employee Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, employeeId])
+}
+
+model PulseResponse {
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @db.Uuid
+  surveyId       String  @db.Uuid
+  /// 0 to 10: how likely are you to recommend working here?
+  score          Int
+  recognised     Boolean
+  managerSupport Boolean
+  workloadFair   Boolean
+  comment        String?
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  survey PulseSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
 }
