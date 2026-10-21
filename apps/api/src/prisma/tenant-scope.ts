@@ -29,6 +29,10 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<Prisma.ModelName> = new Set<Prism
   'PayrollRun',
   'Payslip',
   'ComplianceFiling',
+  'Goal',
+  'ReviewCycle',
+  'Review',
+  'Kudos',
 ]);
 
 type AnyArgs = Record<string, any>;

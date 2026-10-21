@@ -23,6 +23,7 @@ export const PERMISSIONS = {
   'asset.manage': 'Keep the asset register: add, assign, take back, repair and retire assets',
   'claims.manage': 'Decide any overtime or expense claim, mark claims paid and set claim limits',
   'payroll.manage': "Set salaries, run payroll, see everyone's payslips and mark statutory filings",
+  'performance.manage': 'Run review cycles, see every goal and review, and calibrate ratings',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -58,6 +59,7 @@ export const SYSTEM_ROLES: Record<
       'asset.manage',
       'claims.manage',
       'payroll.manage',
+      'performance.manage',
       'audit.read',
     ],
   },

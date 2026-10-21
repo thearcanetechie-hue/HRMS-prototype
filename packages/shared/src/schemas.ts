@@ -668,3 +668,42 @@ export const markFiledSchema = z.object({
   reference: z.string().trim().max(80).nullish(),
 });
 export type MarkFiledInput = z.infer<typeof markFiledSchema>;
+
+// ---------- Performance ----------
+
+export const GOAL_STATUSES = ['ON_TRACK', 'AT_RISK', 'BEHIND', 'DONE'] as const;
+export const GOAL_SCOPES = ['COMPANY', 'TEAM', 'PERSONAL'] as const;
+
+export const goalSchema = z.object({
+  title: z.string().trim().min(2).max(160),
+  description: z.string().trim().max(1000).nullish(),
+  /** Whose goal it is. Company goals still have an owner who drives them. */
+  ownerId: z.string().uuid().optional(),
+  scope: z.enum(GOAL_SCOPES).default('PERSONAL'),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-12-31'),
+  progress: z.number().int().min(0).max(100).default(0),
+  status: z.enum(GOAL_STATUSES).default('ON_TRACK'),
+});
+export type GoalInput = z.infer<typeof goalSchema>;
+export const updateGoalSchema = goalSchema.partial();
+export type UpdateGoalInput = z.infer<typeof updateGoalSchema>;
+
+export const reviewCycleSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  closesOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-12-15'),
+});
+export type ReviewCycleInput = z.infer<typeof reviewCycleSchema>;
+
+/** 1 Needs improvement · 2 Developing · 3 Meets · 4 Exceeds · 5 Outstanding */
+export const reviewInputSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comments: z.string().trim().min(2).max(4000),
+});
+export type ReviewInput = z.infer<typeof reviewInputSchema>;
+
+export const kudosSchema = z.object({
+  toId: z.string().uuid(),
+  value: z.string().trim().min(2).max(40),
+  reason: z.string().trim().min(2).max(300),
+});
+export type KudosInput = z.infer<typeof kudosSchema>;
