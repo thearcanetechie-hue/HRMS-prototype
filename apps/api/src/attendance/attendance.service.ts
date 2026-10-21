@@ -56,7 +56,11 @@ export class AttendanceService {
     const days = eachDay(start, end);
 
     const rows = employees.map((e) => {
-      const cells: Cell[] = days.map((d) => this.cell(e.id, d, records, leaves));
+      const joined = isoDay(e.dateOfJoining);
+      // Days before someone joined stay blank whatever was recorded.
+      const cells: Cell[] = days.map((d) =>
+        d < joined && !isWeekend(d) ? { code: '' } : this.cell(e.id, d, records, leaves),
+      );
       const counted = days
         .map((d, i) => ({ d, c: cells[i]! }))
         .filter(({ d }) => d <= today && !isWeekend(d) && d >= isoDay(e.dateOfJoining));
@@ -201,9 +205,11 @@ export class AttendanceService {
   async mark(input: MarkAttendanceInput) {
     const employee = await this.prisma.db.employee.findUnique({
       where: { id: input.employeeId },
-      select: { id: true },
+      select: { id: true, dateOfJoining: true },
     });
     if (!employee) throw new NotFoundException('Employee not found');
+    if (input.date < isoDay(employee.dateOfJoining))
+      throw new BadRequestException('That is before they joined');
     if (isWeekend(input.date)) throw new BadRequestException('That day is a weekend');
     if (input.date > todayIst())
       throw new BadRequestException('You can’t mark a day in the future');
