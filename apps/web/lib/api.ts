@@ -760,3 +760,58 @@ export interface EngagementSidebar {
   selfEmployeeId: string | null;
   departmentId: string | null;
 }
+
+export interface ConversationItem {
+  id: string;
+  kind: 'DIRECT' | 'CHANNEL';
+  subject: string;
+  channelName: string | null;
+  with: FeedPerson[];
+  preview: string;
+  lastMessageAt: string;
+  unread: number;
+  starred: boolean;
+  joined: boolean;
+  members: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  body: string;
+  author: FeedPerson;
+  mine: boolean;
+  createdAt: string;
+}
+
+export interface ConversationDetail {
+  id: string;
+  kind: 'DIRECT' | 'CHANNEL';
+  subject: string;
+  channelName: string | null;
+  description: string | null;
+  starred: boolean;
+  joined: boolean;
+  /** Everyone else in the conversation. */
+  members: FeedPerson[];
+  memberCount: number;
+  messages: ChatMessage[];
+}
+
+export interface ChannelItem {
+  id: string;
+  name: string;
+  description: string | null;
+  joined: boolean;
+  members: number;
+  unread: number;
+}
+
+export interface ApprovalItem {
+  kind: 'LEAVE' | 'OVERTIME' | 'EXPENSE' | 'TASK';
+  id: string;
+  employee: { id: string; firstName: string; lastName: string };
+  title: string;
+  summary: string;
+  at: string;
+  href: string;
+}

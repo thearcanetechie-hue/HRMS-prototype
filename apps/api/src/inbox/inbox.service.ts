@@ -187,7 +187,9 @@ export class InboxService {
       description: c.description,
       starred: me?.starred ?? false,
       joined: Boolean(me),
-      members: members.map((m) => m.employee),
+      /** Everyone else in the conversation. */
+      members: members.filter((m) => m.employeeId !== self).map((m) => m.employee),
+      memberCount: members.length,
       messages: messages.map((m) => ({
         id: m.id,
         body: m.body,
