@@ -17,6 +17,9 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<Prisma.ModelName> = new Set<Prism
   'ChecklistTemplate',
   'EmployeeChecklist',
   'ChecklistTask',
+  'LeaveType',
+  'LeaveRequest',
+  'AttendanceRecord',
 ]);
 
 type AnyArgs = Record<string, any>;

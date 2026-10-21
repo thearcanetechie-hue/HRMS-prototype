@@ -75,6 +75,9 @@ model Tenant {
   folders       DocumentFolder[]
   checklistTemplates ChecklistTemplate[]
   checklists    EmployeeChecklist[]
+  leaveTypes    LeaveType[]
+  leaveRequests LeaveRequest[]
+  attendance    AttendanceRecord[]
 }
 
 model User {
@@ -243,6 +246,8 @@ model Employee {
   profile     EmployeeProfile?
   documents   Document[]
   checklists  EmployeeChecklist[]
+  leaveRequests LeaveRequest[]
+  attendance  AttendanceRecord[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, workEmail])
@@ -464,4 +469,104 @@ model ChecklistTask {
   checklist EmployeeChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, checklistId])
+}
+
+enum LeaveAccrual {
+  YEARLY
+  MONTHLY
+}
+
+enum LeaveApprover {
+  MANAGER
+  HR
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum AttendanceSource {
+  WEB
+  BIOMETRIC
+  HR
+}
+
+/// A kind of leave the company offers. HR adds and edits these without code.
+model LeaveType {
+  id                String        @id @default(uuid()) @db.Uuid
+  tenantId          String        @db.Uuid
+  name              String
+  /// Short code shown on the register, like PL or SL.
+  code              String
+  tone              String        @default("info")
+  /// null means no yearly limit.
+  daysPerYear       Int?
+  accrual           LeaveAccrual  @default(YEARLY)
+  carryForward      Int           @default(0)
+  documentAfterDays Int?
+  paid              Boolean       @default(true)
+  approver          LeaveApprover @default(MANAGER)
+  countsAsPresent   Boolean       @default(false)
+  active            Boolean       @default(true)
+  position          Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requests LeaveRequest[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
+}
+
+model LeaveRequest {
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @db.Uuid
+  employeeId   String      @db.Uuid
+  leaveTypeId  String      @db.Uuid
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  halfDay      Boolean     @default(false)
+  /// Working days (Monday to Friday) the request covers; 0.5 for a half day.
+  days         Decimal     @db.Decimal(5, 1)
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  requestedById String?    @db.Uuid
+  decidedById  String?     @db.Uuid
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime    @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([tenantId, employeeId, startDate])
+}
+
+/// One person's attendance for one day: a check-in from the web or a biometric device, or HR's mark.
+model AttendanceRecord {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  employeeId  String           @db.Uuid
+  date        DateTime         @db.Date
+  /// P (present), A (absent) or HD (half day).
+  status      String
+  checkIn     DateTime?
+  checkOut    DateTime?
+  source      AttendanceSource @default(WEB)
+  note        String?
+  markedById  String?          @db.Uuid
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([tenantId, date])
 }
