@@ -396,6 +396,9 @@ export function LeaveTypeDialog({
   const [paid, setPaid] = useState(type?.paid ?? true);
   const [approver, setApprover] = useState(type?.approver ?? 'MANAGER');
   const [countsAsPresent, setCountsAsPresent] = useState(type?.countsAsPresent ?? false);
+  const [isCompOff, setIsCompOff] = useState(type?.isCompOff ?? false);
+  const [validity, setValidity] = useState(type?.validityDays ? String(type.validityDays) : '90');
+  const [encashable, setEncashable] = useState(type?.encashable ?? false);
   const [active, setActive] = useState(type?.active ?? true);
   const [error, setError] = useState('');
 
@@ -406,13 +409,16 @@ export function LeaveTypeDialog({
       name,
       code,
       tone,
-      daysPerYear: unlimited ? null : Number(days) || 0,
+      daysPerYear: unlimited || isCompOff ? null : Number(days) || 0,
       accrual,
       carryForward: Number(carry) || 0,
       documentAfterDays: docAfter ? Number(docAfter) : null,
       paid,
       approver,
       countsAsPresent,
+      isCompOff,
+      validityDays: isCompOff ? Number(validity) || null : null,
+      encashable,
       active,
     };
     try {
@@ -531,6 +537,29 @@ export function LeaveTypeDialog({
             </Select>
           </Field>
         </div>
+        <ToggleRow
+          title="Comp-off"
+          caption="Earned by working on a weekly off or holiday instead of given each year"
+          checked={isCompOff}
+          onCheckedChange={setIsCompOff}
+        />
+        {isCompOff && (
+          <Field id="lt-valid" label="Comp-off lapses after (days)">
+            <Input
+              id="lt-valid"
+              type="number"
+              min={1}
+              value={validity}
+              onChange={(e) => setValidity(e.target.value)}
+            />
+          </Field>
+        )}
+        <ToggleRow
+          title="Can be encashed"
+          caption="Unused days can be paid out at year end or when someone leaves"
+          checked={encashable}
+          onCheckedChange={setEncashable}
+        />
         <ToggleRow title="Paid" checked={paid} onCheckedChange={setPaid} />
         <ToggleRow
           title="Counts as present"

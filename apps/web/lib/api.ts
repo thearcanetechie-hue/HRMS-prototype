@@ -258,6 +258,9 @@ export interface LeaveType {
   paid: boolean;
   approver: 'MANAGER' | 'HR';
   countsAsPresent: boolean;
+  isCompOff: boolean;
+  validityDays: number | null;
+  encashable: boolean;
   active: boolean;
 }
 
@@ -273,6 +276,7 @@ export interface AttendanceRegister {
   month: string;
   days: string[];
   today: string;
+  closed: boolean;
   canMark: boolean;
   holidays: { date: string; name: string; optional: boolean; location: string | null }[];
   leaveTypes: Pick<LeaveType, 'id' | 'code' | 'name' | 'tone' | 'countsAsPresent' | 'active'>[];
@@ -287,6 +291,8 @@ export interface AttendanceRegister {
     cells: RegisterCell[];
     present: number;
     workingDays: number;
+    lates: number;
+    latePenaltyDays: number;
   }[];
 }
 
@@ -345,6 +351,7 @@ export interface LeaveBalance {
   used: number;
   pending: number;
   left: number | null;
+  isCompOff?: boolean;
 }
 
 export interface HomeData {

@@ -7,10 +7,13 @@ import {
 import { MarkAttendanceInput, RegisterQuery } from '@hrms/shared';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
-import { currentContext } from '../common/request-context';
+import { currentContext, requireTenantId } from '../common/request-context';
+import { PolicyService } from '../policies/policies.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkCalendar, WorkCalendarService } from './calendar';
-import { eachDay, isoDay, monthRange, todayIst, toDate } from './days';
+import { addDays, eachDay, isoDay, monthRange, todayIst, toDate } from './days';
+import { compOffDays, latePenaltyDays } from './leave-balance';
+import { AttendancePeriods } from './periods';
 import { LeaveService, Viewer } from './leave.service';
 
 /**
@@ -34,6 +37,8 @@ export class AttendanceService {
     private readonly leave: LeaveService,
     private readonly audit: AuditService,
     private readonly calendar: WorkCalendarService,
+    private readonly policies: PolicyService,
+    private readonly periods: AttendancePeriods,
   ) {}
 
   async register(q: RegisterQuery) {
@@ -43,7 +48,7 @@ export class AttendanceService {
     const today = todayIst();
     const employees = await this.visibleEmployees(v, start, q.departmentId);
     const ids = employees.map((e) => e.id);
-    const [records, leaves, types, cal, holidays] = await Promise.all([
+    const [records, leaves, types, cal, holidays, policy, closed] = await Promise.all([
       this.prisma.db.attendanceRecord.findMany({
         where: { employeeId: { in: ids }, date: { gte: toDate(start), lte: toDate(end) } },
       }),
@@ -55,6 +60,8 @@ export class AttendanceService {
         select: { date: true, name: true, optional: true, location: { select: { name: true } } },
         orderBy: { date: 'asc' },
       }),
+      this.policies.get('attendance'),
+      this.periods.isClosed(start),
     ]);
     const days = eachDay(start, end);
 
@@ -77,6 +84,7 @@ export class AttendanceService {
         (n, { c }) => n + (c.code === 'HD' || c.halfDay ? 0.5 : presentCodes.has(c.code) ? 1 : 0),
         0,
       );
+      const lates = cells.filter((c) => c.late).length;
       return {
         employee: {
           id: e.id,
@@ -88,6 +96,12 @@ export class AttendanceService {
         cells,
         present,
         workingDays: counted.length,
+        lates,
+        latePenaltyDays: latePenaltyDays(
+          lates,
+          policy.latePenalty.latesPerHalfDay,
+          policy.latePenalty.enabled,
+        ),
       };
     });
 
@@ -95,7 +109,8 @@ export class AttendanceService {
       month: q.month,
       days,
       today,
-      canMark: v.manage,
+      closed,
+      canMark: v.manage && !closed,
       holidays: holidays.map((h) => ({
         date: isoDay(h.date),
         name: h.name,
@@ -187,6 +202,8 @@ export class AttendanceService {
   async checkIn() {
     const v = await this.leave.viewer();
     if (!v.self) throw new BadRequestException('Your login is not linked to an employee record');
+    if (!(await this.policies.get('attendance')).webCheckIn)
+      throw new BadRequestException('Your company records attendance on its devices, not the web');
     const today = todayIst();
     const existing = await this.prisma.db.attendanceRecord.findUnique({
       where: { employeeId_date: { employeeId: v.self, date: toDate(today) } },
@@ -230,6 +247,7 @@ export class AttendanceService {
       },
     });
     await this.audit.record('attendance.check_out', 'AttendanceRecord', record.id, {});
+    await this.creditCompOff(v.self, todayIst(), record.checkIn, record.checkOut);
     return record;
   }
 
@@ -253,6 +271,7 @@ export class AttendanceService {
       );
     if (input.date > todayIst())
       throw new BadRequestException('You can’t mark a day in the future');
+    await this.periods.assertOpen(input.date);
     const date = toDate(input.date);
     const userId = currentContext().userId ?? null;
 
@@ -350,16 +369,77 @@ export class AttendanceService {
       where: { employeeId, date },
     });
     if (existing && existing.source === 'HR' && source !== 'REGULARISED') return existing;
+    // Device punches for a closed month are kept as punches but don't change the day.
+    if (await this.periods.isClosed(day)) {
+      if (source === 'BIOMETRIC') return existing;
+      await this.periods.assertOpen(day);
+    }
     const checkIn = times.checkIn ?? existing?.checkIn ?? null;
     const checkOut = times.checkOut ?? existing?.checkOut ?? null;
     const cal = await this.calendar.load([employeeId], day, day);
     const status = checkIn && checkOut ? cal.statusFor(employeeId, checkIn, checkOut) : 'P';
     const data = { checkIn, checkOut, status, source, ...(note ? { note } : {}) };
-    return existing
-      ? this.prisma.db.attendanceRecord.update({ where: { id: existing.id }, data })
-      : this.prisma.db.attendanceRecord.create({
+    const saved = existing
+      ? await this.prisma.db.attendanceRecord.update({ where: { id: existing.id }, data })
+      : await this.prisma.db.attendanceRecord.create({
           data: { ...data, employeeId, date } as Prisma.AttendanceRecordUncheckedCreateInput,
         });
+    await this.creditCompOff(employeeId, day, checkIn, checkOut);
+    return saved;
+  }
+
+  /**
+   * Work on a weekly off or holiday earns comp-off (if the company has a comp-off leave type
+   * and the policy allows it): a full or half day by hours worked. Recalculated whenever the
+   * day's times change, so a corrected punch corrects the credit.
+   */
+  private async creditCompOff(
+    employeeId: string,
+    day: string,
+    checkIn: Date | null,
+    checkOut: Date | null,
+  ) {
+    const policy = (await this.policies.get('attendance')).compOff;
+    if (!policy.enabled) return;
+    const type = await this.prisma.db.leaveType.findFirst({
+      where: { isCompOff: true, active: true },
+    });
+    if (!type) return;
+    const cal = await this.calendar.load([employeeId], day, day);
+    if (!cal.dayOff(employeeId, day)) return;
+    const minutes = checkIn && checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60_000 : 0;
+    const days = compOffDays(minutes, policy.halfDayHours, policy.fullDayHours);
+    const existing = await this.prisma.db.leaveLedger.findFirst({
+      where: {
+        employeeId,
+        kind: 'COMP_OFF',
+        sourceDate: toDate(day),
+        leaveTypeId: type.id,
+        createdById: null,
+      },
+    });
+    if (!days) {
+      if (existing) await this.prisma.db.leaveLedger.delete({ where: { id: existing.id } });
+      return;
+    }
+    const data = {
+      days,
+      expiresOn: type.validityDays ? toDate(addDays(day, type.validityDays)) : null,
+      note: `Worked on ${cal.dayOff(employeeId, day) === 'H' ? 'a holiday' : 'a weekly off'}`,
+    };
+    if (existing) await this.prisma.db.leaveLedger.update({ where: { id: existing.id }, data });
+    else
+      await this.prisma.db.leaveLedger.create({
+        data: {
+          ...data,
+          tenantId: requireTenantId(),
+          employeeId,
+          leaveTypeId: type.id,
+          year: Number(day.slice(0, 4)),
+          kind: 'COMP_OFF',
+          sourceDate: toDate(day),
+        },
+      });
   }
 
   private cell(

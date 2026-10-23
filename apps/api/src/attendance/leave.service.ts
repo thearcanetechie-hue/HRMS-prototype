@@ -8,7 +8,9 @@ import {
 import {
   CreateLeaveRequestInput,
   DecideLeaveInput,
+  LeaveAdjustmentInput,
   LeaveTypeInput,
+  LeaveYearEndInput,
   ListLeaveQuery,
   UpdateLeaveTypeInput,
 } from '@hrms/shared';
@@ -16,10 +18,20 @@ import { LeaveType, Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { currentContext, requireTenantId } from '../common/request-context';
 import { EmployeeAccess } from '../employees/employee-access.service';
+import { PolicyService } from '../policies/policies.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_LEAVE_TYPES } from './default-leave-types';
 import { WorkCalendarService } from './calendar';
-import { isoDay, todayIst, toDate } from './days';
+import { eachDay, isoDay, todayIst, toDate } from './days';
+import {
+  compOffBalance,
+  entitlement,
+  half,
+  leaveDays,
+  yearEnd,
+  yearlyBalance,
+} from './leave-balance';
+import { AttendancePeriods } from './periods';
 
 const requestInclude = {
   leaveType: { select: { id: true, name: true, code: true, tone: true, approver: true } },
@@ -51,9 +63,11 @@ export interface Viewer {
  * - The employee's managers (anyone above them in the reporting line) decide types whose
  *   approver is MANAGER; `attendance.manage` (HR) decides anything and can apply on someone's
  *   behalf. Nobody decides their own request.
- * - Balances: yearly types grant the full allowance on 1 January, monthly ones build up a
- *   twelfth each month. Approved and pending requests both count against what is left, so two
- *   requests can't together overdraw it.
+ * - Balances follow ./leave-balance.ts: yearly or monthly accrual, prorated for joiners and
+ *   leavers, plus the leave ledger (opening balances, adjustments, carry forward, comp-off,
+ *   encashed and lapsed days). Approved and pending requests both count against what is left,
+ *   so two requests can't together overdraw it.
+ * - Days in a closed attendance month can't gain, change or lose leave.
  */
 @Injectable()
 export class LeaveService {
@@ -62,6 +76,8 @@ export class LeaveService {
     private readonly access: EmployeeAccess,
     private readonly audit: AuditService,
     private readonly calendar: WorkCalendarService,
+    private readonly policies: PolicyService,
+    private readonly periods: AttendancePeriods,
   ) {}
 
   async viewer(): Promise<Viewer> {
@@ -119,38 +135,233 @@ export class LeaveService {
       select: { id: true },
     });
     if (!exists || !this.canSee(v, employeeId)) throw new NotFoundException('Employee not found');
-    const types = await this.types(false);
-    const requests = await this.prisma.db.leaveRequest.findMany({
-      where: {
-        employeeId,
-        status: { in: ['APPROVED', 'PENDING'] },
-        startDate: { gte: toDate(`${year}-01-01`), lte: toDate(`${year}-12-31`) },
-      },
-      select: { leaveTypeId: true, status: true, days: true },
-    });
-    const months = Number(todayIst().slice(0, 4)) > year ? 12 : Number(todayIst().slice(5, 7));
+    return (await this.computeBalances(employeeId, year)).map((b) => ({
+      leaveType: { id: b.type.id, name: b.type.name, code: b.type.code, tone: b.type.tone },
+      entitled: b.entitled,
+      total: b.type.isCompOff ? null : b.type.daysPerYear,
+      used: b.used,
+      pending: b.pending,
+      left: b.left,
+      isCompOff: b.type.isCompOff,
+    }));
+  }
+
+  /** Every active type's balance for a person and year, without a visibility check. */
+  async computeBalances(employeeId: string, year: number) {
+    const [types, employee, requests, ledger, policy] = await Promise.all([
+      this.types(false),
+      this.prisma.db.employee.findUniqueOrThrow({
+        where: { id: employeeId },
+        select: { dateOfJoining: true, dateOfExit: true },
+      }),
+      this.prisma.db.leaveRequest.findMany({
+        where: { employeeId, status: { in: ['APPROVED', 'PENDING'] } },
+        select: { leaveTypeId: true, status: true, days: true, startDate: true },
+      }),
+      this.prisma.db.leaveLedger.findMany({ where: { employeeId } }),
+      this.policies.get('leave'),
+    ]);
+    const today = todayIst();
+    const tenure = {
+      joined: isoDay(employee.dateOfJoining),
+      exited: employee.dateOfExit ? isoDay(employee.dateOfExit) : null,
+    };
     return types.map((t) => {
-      const sum = (s: 'APPROVED' | 'PENDING') =>
-        requests
-          .filter((r) => r.leaveTypeId === t.id && r.status === s)
-          .reduce((n, r) => n + Number(r.days), 0);
-      const used = sum('APPROVED');
-      const pending = sum('PENDING');
-      const entitled =
-        t.daysPerYear === null
-          ? null
-          : t.accrual === 'MONTHLY'
-            ? Math.round(((t.daysPerYear * months) / 12) * 2) / 2
-            : t.daysPerYear;
-      return {
-        leaveType: { id: t.id, name: t.name, code: t.code, tone: t.tone },
-        entitled,
-        total: t.daysPerYear,
-        used,
-        pending,
-        left: entitled === null ? null : Math.max(0, entitled - used - pending),
-      };
+      const mine = requests.filter((r) => r.leaveTypeId === t.id);
+      if (t.isCompOff) {
+        const line = compOffBalance(
+          ledger
+            .filter((l) => l.leaveTypeId === t.id && l.kind === 'COMP_OFF')
+            .map((l) => ({
+              days: Number(l.days),
+              sourceDate: l.sourceDate ? isoDay(l.sourceDate) : isoDay(l.createdAt),
+              expiresOn: l.expiresOn ? isoDay(l.expiresOn) : null,
+            })),
+          mine.map((r) => ({
+            date: isoDay(r.startDate),
+            days: Number(r.days),
+            status: r.status as 'APPROVED' | 'PENDING',
+          })),
+          today,
+        );
+        return { type: t, ...line };
+      }
+      const inYear = mine.filter((r) => r.startDate.getUTCFullYear() === year);
+      const sum = (st: string) =>
+        inYear.filter((r) => r.status === st).reduce((n, r) => n + Number(r.days), 0);
+      const fromLedger = ledger
+        .filter((l) => l.leaveTypeId === t.id && l.year === year && l.kind !== 'COMP_OFF')
+        .reduce((n, l) => n + Number(l.days), 0);
+      const line = yearlyBalance(
+        entitlement(t, year, today, tenure, policy),
+        fromLedger,
+        sum('APPROVED'),
+        sum('PENDING'),
+      );
+      return { type: t, ...line };
     });
+  }
+
+  // ---------- ledger: opening balances, adjustments, year end ----------
+
+  async ledger(employeeId: string, year: number) {
+    const v = await this.viewer();
+    if (!this.canSee(v, employeeId)) throw new NotFoundException('Employee not found');
+    const rows = await this.prisma.db.leaveLedger.findMany({
+      where: { employeeId, OR: [{ year }, { kind: 'COMP_OFF' }] },
+      include: { leaveType: { select: { name: true, code: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      leaveType: r.leaveType,
+      year: r.year,
+      days: Number(r.days),
+      kind: r.kind,
+      note: r.note,
+      sourceDate: r.sourceDate ? isoDay(r.sourceDate) : null,
+      expiresOn: r.expiresOn ? isoDay(r.expiresOn) : null,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  /** HR sets an opening balance (moving from another system) or corrects a balance. */
+  async adjust(input: LeaveAdjustmentInput) {
+    const [employee, type] = await Promise.all([
+      this.prisma.db.employee.findUnique({ where: { id: input.employeeId }, select: { id: true } }),
+      this.prisma.db.leaveType.findUnique({ where: { id: input.leaveTypeId } }),
+    ]);
+    if (!employee) throw new NotFoundException('Employee not found');
+    if (!type) throw new NotFoundException('Leave type not found');
+    if (type.daysPerYear === null && !type.isCompOff)
+      throw new BadRequestException(`${type.name} has no limit, so there is no balance to adjust`);
+    if (input.kind === 'OPENING') {
+      const dup = await this.prisma.db.leaveLedger.findFirst({
+        where: {
+          employeeId: input.employeeId,
+          leaveTypeId: type.id,
+          year: input.year,
+          kind: 'OPENING',
+        },
+      });
+      if (dup)
+        throw new ConflictException(
+          'An opening balance is already set. Add an adjustment instead.',
+        );
+    }
+    const row = await this.prisma.db.leaveLedger.create({
+      data: {
+        tenantId: requireTenantId(),
+        employeeId: input.employeeId,
+        leaveTypeId: type.id,
+        year: input.year,
+        days: input.days,
+        // Comp-off given by HR behaves like earned comp-off.
+        kind: type.isCompOff ? 'COMP_OFF' : input.kind,
+        note: input.note,
+        ...(type.isCompOff
+          ? {
+              sourceDate: toDate(todayIst()),
+              expiresOn: type.validityDays
+                ? toDate(addDaysIso(todayIst(), type.validityDays))
+                : null,
+            }
+          : {}),
+        createdById: currentContext().userId ?? null,
+      },
+    });
+    await this.audit.record('leave.adjusted', 'LeaveLedger', row.id, {
+      employeeId: input.employeeId,
+      type: type.code,
+      days: input.days,
+    });
+    return { ...row, days: Number(row.days) };
+  }
+
+  /**
+   * Closes a leave year for everyone: unused days carry forward up to each type's limit; the
+   * rest lapse, or with `encash` are marked for payout (encashable types only, up to the
+   * policy's yearly maximum) in the next payroll. A year can be closed once.
+   */
+  async yearEnd(input: LeaveYearEndInput) {
+    const tenantId = requireTenantId();
+    if (input.year >= Number(todayIst().slice(0, 4)))
+      throw new BadRequestException('A leave year can be closed once it has ended');
+    const done = await this.prisma.db.leaveYearClose.findUnique({
+      where: { tenantId_year: { tenantId, year: input.year } },
+    });
+    if (done) throw new ConflictException(`${input.year} is already closed`);
+    const policy = await this.policies.get('leave');
+    const people = await this.prisma.db.employee.findMany({
+      where: {
+        dateOfJoining: { lte: toDate(`${input.year}-12-31`) },
+        OR: [{ dateOfExit: null }, { dateOfExit: { gt: toDate(`${input.year}-12-31`) } }],
+        status: { not: 'EXITED' },
+      },
+      select: { id: true },
+    });
+    const userId = currentContext().userId ?? null;
+    const lastDay = toDate(`${input.year}-12-31`);
+    const rows: Prisma.LeaveLedgerCreateManyInput[] = [];
+    const summary = { people: people.length, carried: 0, lapsed: 0, encashed: 0 };
+    for (const p of people) {
+      for (const b of await this.computeBalances(p.id, input.year)) {
+        if (b.type.isCompOff || b.left === null || b.left <= 0) continue;
+        const { carry, leftover } = yearEnd(b.left, b.type.carryForward);
+        const base = {
+          tenantId,
+          employeeId: p.id,
+          leaveTypeId: b.type.id,
+          sourceDate: lastDay,
+          createdById: userId,
+        };
+        if (carry > 0) {
+          rows.push({
+            ...base,
+            year: input.year + 1,
+            days: carry,
+            kind: 'CARRY_FORWARD',
+            note: `Carried from ${input.year}`,
+          });
+          summary.carried += carry;
+        }
+        if (leftover > 0) {
+          const encash =
+            input.encash && b.type.encashable
+              ? Math.min(leftover, policy.encashment.maxDaysPerYear)
+              : 0;
+          if (encash > 0) {
+            rows.push({
+              ...base,
+              year: input.year,
+              days: -encash,
+              kind: 'ENCASHED',
+              note: `Encashed at the end of ${input.year}`,
+            });
+            summary.encashed += encash;
+          }
+          if (leftover - encash > 0) {
+            rows.push({
+              ...base,
+              year: input.year,
+              days: -half(leftover - encash),
+              kind: 'LAPSED',
+              note: `Lapsed at the end of ${input.year}`,
+            });
+            summary.lapsed += half(leftover - encash);
+          }
+        }
+      }
+    }
+    await this.prisma.db.$transaction([
+      this.prisma.db.leaveLedger.createMany({ data: rows }),
+      this.prisma.db.leaveYearClose.create({
+        data: { tenantId, year: input.year, encashed: input.encash, summary, closedById: userId },
+      }),
+    ]);
+    await this.audit.record('leave.year_closed', 'LeaveYearClose', String(input.year), summary);
+    return summary;
   }
 
   // ---------- requests ----------
@@ -196,8 +407,22 @@ export class LeaveService {
     const type = await this.prisma.db.leaveType.findUnique({ where: { id: input.leaveTypeId } });
     if (!type || !type.active) throw new NotFoundException('Leave type not found');
 
-    const cal = await this.calendar.load([employeeId], input.startDate, input.endDate);
-    const days = input.halfDay ? 0.5 : cal.workingDays(employeeId, input.startDate, input.endDate);
+    await this.periods.assertOpen(input.startDate, input.endDate);
+    const [cal, policy] = await Promise.all([
+      this.calendar.load([employeeId], input.startDate, input.endDate),
+      this.policies.get('leave'),
+    ]);
+    const days = input.halfDay
+      ? cal.isWorking(employeeId, input.startDate)
+        ? 0.5
+        : 0
+      : leaveDays(
+          eachDay(input.startDate, input.endDate).map((date) => ({
+            date,
+            working: cal.isWorking(employeeId, date),
+          })),
+          policy.sandwich,
+        );
     if (days === 0)
       throw new BadRequestException(
         'Those dates are all weekly offs or holidays, so no leave is needed',
@@ -247,6 +472,8 @@ export class LeaveService {
     if (request.status !== 'PENDING')
       throw new BadRequestException('This request was already decided');
     if (!this.canDecide(v, request)) throw new ForbiddenException('You can’t decide this request');
+    if (input.decision === 'APPROVE')
+      await this.periods.assertOpen(isoDay(request.startDate), isoDay(request.endDate));
 
     const updated = await this.prisma.db.leaveRequest.update({
       where: { id },
@@ -281,6 +508,8 @@ export class LeaveService {
       (own && request.status === 'PENDING') ||
       (v.manage && (request.status === 'PENDING' || request.status === 'APPROVED'));
     if (!allowed) throw new ForbiddenException('Ask HR to cancel this leave');
+    if (request.status === 'APPROVED')
+      await this.periods.assertOpen(isoDay(request.startDate), isoDay(request.endDate));
     const updated = await this.prisma.db.leaveRequest.update({
       where: { id },
       data: { status: 'CANCELLED' },
@@ -332,39 +561,13 @@ export class LeaveService {
   }
 
   private async assertBalance(employeeId: string, type: LeaveType, start: string, days: number) {
-    if (type.daysPerYear === null) return;
-    const balances = await this.balancesUnchecked(employeeId, Number(start.slice(0, 4)));
-    const left = balances.find((b) => b.id === type.id)?.left ?? 0;
+    if (type.daysPerYear === null && !type.isCompOff) return;
+    const balances = await this.computeBalances(employeeId, Number(start.slice(0, 4)));
+    const left = balances.find((b) => b.type.id === type.id)?.left ?? 0;
     if (days > left)
       throw new BadRequestException(
         `Only ${left} ${left === 1 ? 'day' : 'days'} of ${type.name.toLowerCase()} left`,
       );
-  }
-
-  /** Balance maths without the visibility check (used when applying). */
-  private async balancesUnchecked(employeeId: string, year: number) {
-    const types = await this.prisma.db.leaveType.findMany({ where: { active: true } });
-    const requests = await this.prisma.db.leaveRequest.findMany({
-      where: {
-        employeeId,
-        status: { in: ['APPROVED', 'PENDING'] },
-        startDate: { gte: toDate(`${year}-01-01`), lte: toDate(`${year}-12-31`) },
-      },
-      select: { leaveTypeId: true, days: true },
-    });
-    const months = Number(todayIst().slice(0, 4)) > year ? 12 : Number(todayIst().slice(5, 7));
-    return types.map((t) => {
-      const taken = requests
-        .filter((r) => r.leaveTypeId === t.id)
-        .reduce((n, r) => n + Number(r.days), 0);
-      const entitled =
-        t.daysPerYear === null
-          ? Infinity
-          : t.accrual === 'MONTHLY'
-            ? Math.round(((t.daysPerYear * months) / 12) * 2) / 2
-            : t.daysPerYear;
-      return { id: t.id, left: Math.max(0, entitled - taken) };
-    });
   }
 
   private canDecide(v: Viewer, r: RequestRow) {
@@ -387,3 +590,6 @@ export class LeaveService {
     };
   }
 }
+
+const addDaysIso = (iso: string, n: number) =>
+  new Date(new Date(`${iso}T00:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);

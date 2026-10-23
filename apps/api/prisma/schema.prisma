@@ -112,6 +112,10 @@ model Tenant {
   regularisations AttendanceRegularisation[]
   biometricDevices BiometricDevice[]
   punches       Punch[]
+  leaveLedger   LeaveLedger[]
+  leaveYearCloses LeaveYearClose[]
+  attendanceMonths AttendanceMonth[]
+  policies      Policy[]
 }
 
 model User {
@@ -310,6 +314,7 @@ model Employee {
   pulseParticipations PulseParticipant[]
   regularisations AttendanceRegularisation[]
   punches       Punch[]
+  leaveLedger   LeaveLedger[]
   conversations ConversationMember[]
   messages      Message[]
 
@@ -576,6 +581,12 @@ model LeaveType {
   paid              Boolean       @default(true)
   approver          LeaveApprover @default(MANAGER)
   countsAsPresent   Boolean       @default(false)
+  /// Earned by working on a weekly off or holiday instead of given yearly.
+  isCompOff         Boolean       @default(false)
+  /// Comp-off credits lapse after this many days.
+  validityDays      Int?
+  /// Unused days can be paid out at year end or exit.
+  encashable        Boolean       @default(false)
   active            Boolean       @default(true)
   position          Int           @default(0)
   createdAt         DateTime      @default(now())
@@ -583,6 +594,7 @@ model LeaveType {
 
   tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   requests LeaveRequest[]
+  ledger   LeaveLedger[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, name])
@@ -1394,4 +1406,94 @@ model Punch {
   @@unique([deviceId, deviceUserId, punchedAt])
   @@index([tenantId, employeeId, punchedAt])
   @@index([tenantId, deviceUserId])
+}
+
+enum LeaveLedgerKind {
+  OPENING
+  ADJUSTMENT
+  CARRY_FORWARD
+  COMP_OFF
+  ENCASHED
+  LAPSED
+}
+
+/// Changes to a leave balance besides leave taken: opening balances, HR adjustments, carry
+/// forward, comp-off earned, and days encashed or lapsed at year end. Credits are positive,
+/// debits negative.
+model LeaveLedger {
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @db.Uuid
+  employeeId  String          @db.Uuid
+  leaveTypeId String          @db.Uuid
+  year        Int
+  days        Decimal         @db.Decimal(5, 1)
+  kind        LeaveLedgerKind
+  note        String?
+  /// Comp-off: the day worked. Year end: the last day of the year closed.
+  sourceDate  DateTime?       @db.Date
+  /// Comp-off credits expire.
+  expiresOn   DateTime?       @db.Date
+  /// Encashment: the payroll run that paid it.
+  paidInRunId String?         @db.Uuid
+  createdById String?         @db.Uuid
+  createdAt   DateTime        @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId, year])
+  @@index([employeeId, kind, sourceDate])
+}
+
+/// A leave year closed by HR: carry forward written, the rest lapsed or encashed.
+model LeaveYearClose {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  year        Int
+  encashed    Boolean  @default(false)
+  summary     Json     @default("{}")
+  closedById  String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, year])
+}
+
+enum AttendanceMonthStatus {
+  OPEN
+  CLOSED
+}
+
+/// A month's attendance, closed by HR before payroll so the register and payslips agree.
+model AttendanceMonth {
+  id         String                @id @default(uuid()) @db.Uuid
+  tenantId   String                @db.Uuid
+  /// YYYY-MM
+  month      String
+  status     AttendanceMonthStatus @default(OPEN)
+  closedAt   DateTime?
+  closedById String?               @db.Uuid
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, month])
+}
+
+/// A company policy HR has changed, stored as only the changed values (see packages/shared/src/policies.ts).
+model Policy {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  key         String
+  data        Json     @default("{}")
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
 }

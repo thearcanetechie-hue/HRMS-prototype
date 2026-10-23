@@ -18,6 +18,7 @@ import {
   Menu as MenuIcon,
   Network,
   Plug,
+  SlidersHorizontal,
   Receipt,
   Settings,
   Target,
@@ -112,6 +113,12 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/analytics', label: 'Analytics', icon: BarChart3, show: isHr },
       { href: '/integrations', label: 'Integrations', icon: Plug, show: isHr },
+      {
+        href: '/policies',
+        label: 'Policies',
+        icon: SlidersHorizontal,
+        show: (can) => can('attendance.manage') || can('payroll.manage'),
+      },
     ],
   },
 ];

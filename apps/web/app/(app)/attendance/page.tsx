@@ -4,6 +4,7 @@ import * as Menu from '@radix-ui/react-dropdown-menu';
 import { CalendarPlus, ChevronLeft, ChevronRight, LogIn, LogOut, Pencil, Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { DevicesCard, FixesCard, HolidaysCard, ShiftsCard } from '@/components/attendance-setup';
+import { LeaveAdminCard, MonthCloseCard } from '@/components/month-close';
 import { ApplyLeaveDialog, LeaveRequestItem, LeaveTypeDialog, MarkForm } from '@/components/leave';
 import { Avatar } from '@/components/ui/avatar';
 import { Toast, useToast } from '@/components/ui/bits';
@@ -219,6 +220,7 @@ export default function AttendancePage() {
             <TabsTrigger value="holidays">Holidays</TabsTrigger>
             <TabsTrigger value="shifts">Shifts</TabsTrigger>
             {manage && <TabsTrigger value="devices">Devices</TabsTrigger>}
+            {manage && <TabsTrigger value="close">Month close</TabsTrigger>}
           </TabsList>
         </Tabs>
         {departments.length > 0 && (manage || can('employee.read')) && (
@@ -281,6 +283,11 @@ export default function AttendancePage() {
                   <ChevronLeft />
                 </Button>
                 {monthLabel(month)} register
+                {register?.closed && (
+                  <span className="ml-1 rounded-full bg-success/12 px-2 py-0.5 text-xs font-bold text-success">
+                    Closed
+                  </span>
+                )}
                 <Button
                   variant="ghost"
                   size="icon-sm"
@@ -482,6 +489,16 @@ export default function AttendancePage() {
           <ShiftsCard manage={manage} onToast={showToast} onChanged={refresh} />
           {manage && <DevicesCard onToast={showToast} onChanged={refresh} />}
         </div>
+        {manage && (
+          <div className="grid gap-5 xl:grid-cols-2">
+            <MonthCloseCard
+              month={month < thisMonth() ? month : shiftMonth(thisMonth(), -1)}
+              onToast={showToast}
+              onChanged={refresh}
+            />
+            <LeaveAdminCard types={types} onToast={showToast} onChanged={refresh} />
+          </div>
+        )}
       </div>
 
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>
@@ -705,6 +722,18 @@ function Register({
               })}
               <td className="pl-2 text-right font-mono whitespace-nowrap">
                 {r.present} / {r.workingDays}
+                {r.lates > 0 && (
+                  <span
+                    className="ml-1.5 text-[11px] text-warning"
+                    title={
+                      r.latePenaltyDays
+                        ? `${r.latePenaltyDays} unpaid for late marks`
+                        : 'Late check-ins'
+                    }
+                  >
+                    {r.lates}L
+                  </span>
+                )}
               </td>
             </tr>
           ))}
