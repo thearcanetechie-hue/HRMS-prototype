@@ -163,7 +163,7 @@ describe('Attendance and leave', () => {
     const created = await api()
       .post('/api/leave/types')
       .set(owner.auth)
-      .send({ name: 'Marriage leave', code: 'ML', daysPerYear: 2, tone: 'primary' })
+      .send({ name: 'Marriage leave', code: 'MR', daysPerYear: 2, tone: 'primary' })
       .expect(201);
     await api()
       .post('/api/leave/types')

@@ -9,11 +9,13 @@ import { DecideRegularisationInput, RegularisationInput } from '@hrms/shared';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { currentContext, requireTenantId } from '../common/request-context';
+import { PolicyService } from '../policies/policies.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttendanceService } from './attendance.service';
 import { WorkCalendarService } from './calendar';
 import { addDays, isoDay, todayIst, toDate } from './days';
 import { LeaveService, Viewer } from './leave.service';
+import { AttendancePeriods } from './periods';
 
 const person = {
   select: {
@@ -30,9 +32,6 @@ const at = (day: string, hhmm: string) => new Date(`${day}T${hhmm}:00+05:30`);
 const hhmm = (d: Date | null) =>
   d ? new Date(d.getTime() + 5.5 * 3_600_000).toISOString().slice(11, 16) : null;
 
-/** How far back someone can ask to fix a day. */
-export const REGULARISE_WITHIN_DAYS = 30;
-
 /**
  * Requests to fix a day's attendance: a missed punch, a forgotten check-out or a wrong time.
  * The person's manager (anyone above them) or HR decides; nobody decides their own. An approved
@@ -46,6 +45,8 @@ export class RegularisationService {
     private readonly attendance: AttendanceService,
     private readonly calendar: WorkCalendarService,
     private readonly audit: AuditService,
+    private readonly policies: PolicyService,
+    private readonly periods: AttendancePeriods,
   ) {}
 
   private canDecide(v: Viewer, employeeId: string) {
@@ -108,10 +109,24 @@ export class RegularisationService {
     const today = todayIst();
     if (input.date > today)
       throw new BadRequestException('You can’t fix a day that hasn’t happened');
-    if (input.date < addDays(today, -REGULARISE_WITHIN_DAYS))
-      throw new BadRequestException(
-        `Fixes can be asked for up to ${REGULARISE_WITHIN_DAYS} days back`,
-      );
+    const rules = (await this.policies.get('attendance')).regularisation;
+    if (input.date < addDays(today, -rules.windowDays))
+      throw new BadRequestException(`Fixes can be asked for up to ${rules.windowDays} days back`);
+    await this.periods.assertOpen(input.date);
+    if (rules.maxPerMonth > 0) {
+      const month = input.date.slice(0, 7);
+      const used = await this.prisma.db.attendanceRegularisation.count({
+        where: {
+          employeeId,
+          status: { in: ['PENDING', 'APPROVED'] },
+          date: { gte: toDate(`${month}-01`), lte: toDate(`${month}-31`) },
+        },
+      });
+      if (used >= rules.maxPerMonth)
+        throw new BadRequestException(
+          `Your company allows ${rules.maxPerMonth} fixes a month, and that month has used them all`,
+        );
+    }
     if (input.date < isoDay(employee.dateOfJoining))
       throw new BadRequestException('That is before they joined');
     const cal = await this.calendar.load([employeeId], input.date, input.date);
@@ -151,6 +166,7 @@ export class RegularisationService {
     if (r.status !== 'PENDING')
       throw new ConflictException('This request has already been decided');
     const approve = input.decision === 'APPROVE';
+    if (approve) await this.periods.assertOpen(isoDay(r.date));
     const updated = await this.prisma.db.attendanceRegularisation.update({
       where: { id },
       data: {

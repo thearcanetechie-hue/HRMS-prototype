@@ -467,6 +467,12 @@ export const leaveTypeSchema = z.object({
   approver: z.enum(['MANAGER', 'HR']).default('MANAGER'),
   /** Field visits and work from home count as present on the register. */
   countsAsPresent: z.boolean().default(false),
+  /** Earned by working on a weekly off or holiday, not given yearly. */
+  isCompOff: z.boolean().default(false),
+  /** Comp-off credits lapse after this many days. */
+  validityDays: z.number().int().min(1).max(366).nullable().default(null),
+  /** Unused days can be paid out at year end or exit. */
+  encashable: z.boolean().default(false),
   active: z.boolean().default(true),
 });
 export type LeaveTypeInput = z.infer<typeof leaveTypeSchema>;
@@ -888,3 +894,32 @@ export const mapDeviceUserSchema = z.object({
   deviceUserId: z.string().trim().min(1).max(40),
   employeeId: z.string().uuid(),
 });
+
+export const leaveAdjustmentSchema = z.object({
+  employeeId: z.string().uuid(),
+  leaveTypeId: z.string().uuid(),
+  year: z.number().int().min(2000).max(2100),
+  /** Positive adds days, negative takes them away. */
+  days: z
+    .number()
+    .min(-366)
+    .max(366)
+    .refine((d) => d !== 0 && Number.isInteger(d * 2), 'Use whole or half days'),
+  kind: z.enum(['OPENING', 'ADJUSTMENT']).default('ADJUSTMENT'),
+  note: z.string().trim().min(2).max(300),
+});
+export type LeaveAdjustmentInput = z.infer<typeof leaveAdjustmentSchema>;
+
+export const leaveYearEndSchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+  /** Pay out what can't be carried forward for encashable types, instead of letting it lapse. */
+  encash: z.boolean().default(false),
+});
+export type LeaveYearEndInput = z.infer<typeof leaveYearEndSchema>;
+
+export const monthCloseSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  /** What unmarked working days become: absent (unpaid) or present. */
+  unmarkedAs: z.enum(['A', 'P']).default('A'),
+});
+export type MonthCloseInput = z.infer<typeof monthCloseSchema>;
