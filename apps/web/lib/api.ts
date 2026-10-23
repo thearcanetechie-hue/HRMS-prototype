@@ -265,6 +265,8 @@ export interface RegisterCell {
   code: string;
   late?: boolean;
   halfDay?: boolean;
+  /** A holiday's name. */
+  title?: string;
 }
 
 export interface AttendanceRegister {
@@ -272,6 +274,7 @@ export interface AttendanceRegister {
   days: string[];
   today: string;
   canMark: boolean;
+  holidays: { date: string; name: string; optional: boolean; location: string | null }[];
   leaveTypes: Pick<LeaveType, 'id' | 'code' | 'name' | 'tone' | 'countsAsPresent' | 'active'>[];
   rows: {
     employee: {
@@ -290,6 +293,10 @@ export interface AttendanceRegister {
 export interface AttendanceToday {
   date: string;
   weekend: boolean;
+  /** The holiday the caller has off today, if any. */
+  holiday: string | null;
+  /** People with a weekly off or holiday today. */
+  off: number;
   headcount: number;
   present: number;
   late: number;
@@ -302,6 +309,8 @@ export interface AttendanceToday {
     checkIn: string | null;
     checkOut: string | null;
     status: string | null;
+    late: boolean;
+    shift: { name: string; start: string; end: string } | null;
   } | null;
 }
 
@@ -807,11 +816,72 @@ export interface ChannelItem {
 }
 
 export interface ApprovalItem {
-  kind: 'LEAVE' | 'OVERTIME' | 'EXPENSE' | 'TASK';
+  kind: 'LEAVE' | 'OVERTIME' | 'EXPENSE' | 'TASK' | 'ATTENDANCE';
   id: string;
   employee: { id: string; firstName: string; lastName: string };
   title: string;
   summary: string;
   at: string;
   href: string;
+}
+
+export interface ShiftItem {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  graceMinutes: number;
+  fullDayMinutes: number;
+  halfDayMinutes: number;
+  weeklyOffs: number[];
+  isDefault: boolean;
+  people: number;
+}
+
+export interface HolidayItem {
+  id: string;
+  date: string;
+  name: string;
+  optional: boolean;
+  location: Named | null;
+}
+
+export interface FixRequest {
+  id: string;
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeCode: string;
+    department: { name: string } | null;
+  };
+  date: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  recorded: { checkIn: string | null; checkOut: string | null };
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  decisionNote: string | null;
+  createdAt: string;
+  canDecide: boolean;
+  canCancel: boolean;
+}
+
+export interface DeviceItem {
+  id: string;
+  name: string;
+  serialNumber: string;
+  location: Named | null;
+  keyPrefix: string | null;
+  hasKey: boolean;
+  active: boolean;
+  lastSeenAt: string | null;
+  punchesToday: number;
+  unmatched: number;
+}
+
+export interface UnmatchedUser {
+  deviceUserId: string;
+  punches: number;
+  lastPunchAt: string | null;
 }

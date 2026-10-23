@@ -3,6 +3,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { CalendarPlus, ChevronLeft, ChevronRight, LogIn, LogOut, Pencil, Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { DevicesCard, FixesCard, HolidaysCard, ShiftsCard } from '@/components/attendance-setup';
 import { ApplyLeaveDialog, LeaveRequestItem, LeaveTypeDialog, MarkForm } from '@/components/leave';
 import { Avatar } from '@/components/ui/avatar';
 import { Toast, useToast } from '@/components/ui/bits';
@@ -100,6 +101,12 @@ export default function AttendancePage() {
   useEffect(() => {
     void loadRegister();
   }, [loadRegister]);
+  // Links like /attendance?tab=fixes (from the Inbox) open on that section.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t) setTimeout(() => scrollTo(t), 400);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     void loadRest();
     api<Named[]>('/org/departments')
@@ -174,7 +181,7 @@ export default function AttendancePage() {
         description={`${monthLabel(month)} register, leave requests and the leave types your company offers.`}
         actions={
           <>
-            {me.employee && today && !today.weekend && !checkedOut && (
+            {me.employee && today && !today.weekend && !today.holiday && !checkedOut && (
               <Button onClick={() => check(checkedIn ? 'out' : 'in')}>
                 {checkedIn ? <LogOut /> : <LogIn />}
                 {checkedIn ? `Check out (in at ${timeOf(checkedIn)})` : 'Check in'}
@@ -207,10 +214,11 @@ export default function AttendancePage() {
           <TabsList>
             <TabsTrigger value="register">Register</TabsTrigger>
             <TabsTrigger value="requests">Leave requests</TabsTrigger>
+            <TabsTrigger value="fixes">Fixes</TabsTrigger>
             <TabsTrigger value="types">Leave types</TabsTrigger>
-            <TabsTrigger value="holidays" disabled title="Coming soon">
-              Holidays
-            </TabsTrigger>
+            <TabsTrigger value="holidays">Holidays</TabsTrigger>
+            <TabsTrigger value="shifts">Shifts</TabsTrigger>
+            {manage && <TabsTrigger value="devices">Devices</TabsTrigger>}
           </TabsList>
         </Tabs>
         {departments.length > 0 && (manage || can('employee.read')) && (
@@ -237,9 +245,26 @@ export default function AttendancePage() {
             </Card>
           ))}
         </div>
-        {today && today.notMarked > 0 && !today.weekend && (
+        {today && (
           <p className="-mt-2 text-[13px] text-muted-foreground">
-            {today.notMarked} of {today.headcount} not checked in yet today.
+            {[
+              today.holiday
+                ? `Today is ${today.holiday}.`
+                : today.weekend
+                  ? 'Today is your weekly off.'
+                  : today.notMarked > 0
+                    ? `${today.notMarked} of ${today.headcount} not checked in yet today.`
+                    : null,
+              today.off > 0 && !today.weekend && !today.holiday
+                ? `${today.off} on a weekly off or holiday.`
+                : null,
+              today.me?.shift
+                ? `Your shift: ${today.me.shift.name}, ${today.me.shift.start} to ${today.me.shift.end}.`
+                : null,
+              today.me?.late ? 'You checked in late today.' : null,
+            ]
+              .filter(Boolean)
+              .join(' ')}
           </p>
         )}
 
@@ -268,13 +293,14 @@ export default function AttendancePage() {
               </CardTitle>
               <CardDescription>
                 {register?.canMark
-                  ? 'Click any day to change it. Weekends are shaded.'
-                  : 'Weekends are shaded. Ask HR to correct a day.'}
+                  ? 'Click any day to change it. Weekly offs and holidays are shaded.'
+                  : 'Weekly offs and holidays are shaded. Missed a punch? Ask for a fix below.'}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               {[
                 ...Object.entries(MARKS).map(([code, m]) => [code, m.label, m.tone] as const),
+                ['H', 'Holiday', 'primary'] as const,
                 ...(register?.leaveTypes ?? [])
                   .filter((t) => t.active)
                   .map((t) => [t.code, t.name, t.tone] as const),
@@ -447,6 +473,15 @@ export default function AttendancePage() {
             )}
           </div>
         </div>
+
+        <div className="grid gap-5 xl:grid-cols-2">
+          <FixesCard hasEmployee={Boolean(me.employee)} onToast={showToast} onChanged={refresh} />
+          <HolidaysCard manage={manage} onToast={showToast} onChanged={refresh} />
+        </div>
+        <div className={cn('grid gap-5', manage && 'xl:grid-cols-2')}>
+          <ShiftsCard manage={manage} onToast={showToast} onChanged={refresh} />
+          {manage && <DevicesCard onToast={showToast} onChanged={refresh} />}
+        </div>
       </div>
 
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>
@@ -543,10 +578,12 @@ function Register({
             </th>
             {register.days.map((d) => {
               const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
-              const weekend = dow === 0 || dow === 6;
+              const holiday = register.holidays.find((h) => h.date === d && !h.optional);
+              const weekend = dow === 0 || dow === 6 || Boolean(holiday);
               return (
                 <th
                   key={d}
+                  title={holiday?.name}
                   className={cn(
                     'w-[38px] rounded-md text-center text-[11px] leading-tight font-bold',
                     weekend ? 'text-primary' : 'text-muted-foreground',
@@ -580,14 +617,20 @@ function Register({
               </td>
               {r.cells.map((c, i) => {
                 const day = register.days[i]!;
-                if (c.code === 'W')
+                if (c.code === 'W' || c.code === 'H')
                   return (
                     <td
                       key={day}
-                      aria-label="Weekend"
-                      className="h-[30px] w-[38px] rounded-lg bg-surface-2 text-center text-muted-foreground"
+                      aria-label={c.code === 'H' ? `Holiday: ${c.title ?? ''}` : 'Weekly off'}
+                      title={c.code === 'H' ? c.title : 'Weekly off'}
+                      className={cn(
+                        'h-[30px] w-[38px] rounded-lg text-center text-[11px] font-bold',
+                        c.code === 'H'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-surface-2 text-muted-foreground',
+                      )}
                     >
-                      ·
+                      {c.code === 'H' ? 'H' : '·'}
                     </td>
                   );
                 const tone = toneOf(c.code);

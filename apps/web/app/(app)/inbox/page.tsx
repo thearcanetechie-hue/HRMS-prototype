@@ -55,6 +55,7 @@ const APPROVAL: Record<ApprovalItem['kind'], [string, BadgeTone]> = {
   OVERTIME: ['Overtime', 'warning'],
   EXPENSE: ['Expense', 'accent'],
   TASK: ['Checklist', 'success'],
+  ATTENDANCE: ['Attendance', 'warning'],
 };
 
 const nameOf = (p: { firstName: string; lastName: string }) =>
