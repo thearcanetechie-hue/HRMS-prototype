@@ -25,7 +25,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { PolicyService } from '../policies/policies.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttendanceService } from './attendance.service';
-import { toDate, todayIst } from './days';
+import { isoDay, toDate, todayIst } from './days';
 import { LeaveService } from './leave.service';
 
 const monthQuery = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/) });
@@ -57,10 +57,23 @@ export class MonthCloseService {
       this.policies.get('attendance'),
     ]);
     const today = todayIst();
+    // Days before someone joined or after they left are blank on the register but not unmarked.
+    const people = await this.prisma.db.employee.findMany({
+      where: { id: { in: register.rows.map((r) => r.employee.id) } },
+      select: { id: true, dateOfJoining: true, dateOfExit: true },
+    });
+    const employed = (id: string, d: string) => {
+      const p = people.find((x) => x.id === id);
+      return Boolean(
+        p && d >= isoDay(p.dateOfJoining) && (!p.dateOfExit || d <= isoDay(p.dateOfExit)),
+      );
+    };
     const unmarked = register.rows
       .map((r) => ({
         employee: r.employee,
-        days: register.days.filter((d, i) => d <= today && r.cells[i]?.code === ''),
+        days: register.days.filter(
+          (d, i) => d <= today && r.cells[i]?.code === '' && employed(r.employee.id, d),
+        ),
         lates: r.lates,
         latePenaltyDays: r.latePenaltyDays,
       }))
