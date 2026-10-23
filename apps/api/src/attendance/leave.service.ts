@@ -18,7 +18,8 @@ import { currentContext, requireTenantId } from '../common/request-context';
 import { EmployeeAccess } from '../employees/employee-access.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_LEAVE_TYPES } from './default-leave-types';
-import { isoDay, todayIst, toDate, workingDays } from './days';
+import { WorkCalendarService } from './calendar';
+import { isoDay, todayIst, toDate } from './days';
 
 const requestInclude = {
   leaveType: { select: { id: true, name: true, code: true, tone: true, approver: true } },
@@ -60,6 +61,7 @@ export class LeaveService {
     private readonly prisma: PrismaService,
     private readonly access: EmployeeAccess,
     private readonly audit: AuditService,
+    private readonly calendar: WorkCalendarService,
   ) {}
 
   async viewer(): Promise<Viewer> {
@@ -194,9 +196,12 @@ export class LeaveService {
     const type = await this.prisma.db.leaveType.findUnique({ where: { id: input.leaveTypeId } });
     if (!type || !type.active) throw new NotFoundException('Leave type not found');
 
-    const days = input.halfDay ? 0.5 : workingDays(input.startDate, input.endDate);
+    const cal = await this.calendar.load([employeeId], input.startDate, input.endDate);
+    const days = input.halfDay ? 0.5 : cal.workingDays(employeeId, input.startDate, input.endDate);
     if (days === 0)
-      throw new BadRequestException('Those dates are all weekends, so no leave is needed');
+      throw new BadRequestException(
+        'Those dates are all weekly offs or holidays, so no leave is needed',
+      );
     await this.assertNoOverlap(employeeId, input.startDate, input.endDate);
     await this.assertBalance(employeeId, type, input.startDate, days);
 

@@ -803,3 +803,88 @@ export const channelSchema = z.object({
   description: z.string().trim().max(200).nullish(),
 });
 export type ChannelInput = z.infer<typeof channelSchema>;
+
+const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a time like 09:30');
+
+export const shiftSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  startTime: clock,
+  endTime: clock,
+  graceMinutes: z.number().int().min(0).max(240).default(15),
+  fullDayMinutes: z.number().int().min(60).max(1440).default(480),
+  halfDayMinutes: z.number().int().min(30).max(720).default(240),
+  weeklyOffs: z.array(z.number().int().min(0).max(6)).max(6).default([0, 6]),
+  isDefault: z.boolean().default(false),
+});
+export type ShiftInput = z.infer<typeof shiftSchema>;
+export const updateShiftSchema = shiftSchema.partial();
+export type UpdateShiftInput = z.infer<typeof updateShiftSchema>;
+export const assignShiftSchema = z.object({
+  employeeIds: z.array(z.string().uuid()).min(1).max(500),
+});
+
+export const holidaySchema = z.object({
+  date: isoDate,
+  name: z.string().trim().min(2).max(80),
+  optional: z.boolean().default(false),
+  /** Leave empty for every location. */
+  locationId: z.string().uuid().nullish(),
+});
+export type HolidayInput = z.infer<typeof holidaySchema>;
+
+export const regularisationSchema = z
+  .object({
+    /** HR can raise one for someone else; otherwise it's for the caller. */
+    employeeId: z.string().uuid().optional(),
+    date: isoDate,
+    checkIn: clock.nullish(),
+    checkOut: clock.nullish(),
+    reason: z.string().trim().min(3).max(500),
+  })
+  .refine((r) => r.checkIn || r.checkOut, {
+    message: 'Give a check-in or check-out time',
+    path: ['checkIn'],
+  })
+  .refine((r) => !r.checkIn || !r.checkOut || r.checkOut > r.checkIn, {
+    message: 'Check-out must be after check-in',
+    path: ['checkOut'],
+  });
+export type RegularisationInput = z.infer<typeof regularisationSchema>;
+export const decideRegularisationSchema = z.object({
+  decision: z.enum(['APPROVE', 'REJECT']),
+  note: z.string().trim().max(300).nullish(),
+});
+export type DecideRegularisationInput = z.infer<typeof decideRegularisationSchema>;
+
+export const deviceSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  serialNumber: z.string().trim().min(3).max(60),
+  locationId: z.string().uuid().nullish(),
+});
+export type DeviceInput = z.infer<typeof deviceSchema>;
+export const updateDeviceSchema = z.object({
+  name: z.string().trim().min(2).max(60).optional(),
+  locationId: z.string().uuid().nullish(),
+  active: z.boolean().optional(),
+});
+export type UpdateDeviceInput = z.infer<typeof updateDeviceSchema>;
+
+/** What a device (or a bridge in front of it) sends to the punch API. */
+export const punchBatchSchema = z.object({
+  punches: z
+    .array(
+      z.object({
+        userId: z.string().trim().min(1).max(40),
+        /** ISO time with an offset, e.g. 2026-10-23T09:12:00+05:30. */
+        time: z.string().datetime({ offset: true }),
+        direction: z.enum(['IN', 'OUT', 'UNKNOWN']).default('UNKNOWN'),
+      }),
+    )
+    .min(1)
+    .max(1000),
+});
+export type PunchBatchInput = z.infer<typeof punchBatchSchema>;
+export const mapDeviceUserSchema = z.object({
+  deviceUserId: z.string().trim().min(1).max(40),
+  employeeId: z.string().uuid(),
+});

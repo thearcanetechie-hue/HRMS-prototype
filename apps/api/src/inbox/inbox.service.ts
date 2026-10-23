@@ -8,6 +8,7 @@ import { ChannelInput, NewConversationInput } from '@hrms/shared';
 import { Prisma } from '@prisma/client';
 import { addDays, isoDay, todayIst } from '../attendance/days';
 import { LeaveService } from '../attendance/leave.service';
+import { RegularisationService } from '../attendance/regularisation.service';
 import { ClaimsService } from '../claims/claims.service';
 import { requireTenantId } from '../common/request-context';
 import { EmployeeAccess } from '../employees/employee-access.service';
@@ -53,6 +54,7 @@ export class InboxService {
     private readonly leave: LeaveService,
     private readonly claims: ClaimsService,
     private readonly lifecycle: LifecycleService,
+    private readonly fixes: RegularisationService,
   ) {}
 
   private async self() {
@@ -361,11 +363,12 @@ export class InboxService {
   /** Everything waiting on the caller: decisions first, then checklist tasks due within a week. */
   async approvals() {
     const today = todayIst();
-    const [leave, overtime, expenses, checklists] = await Promise.all([
+    const [leave, overtime, expenses, checklists, fixes] = await Promise.all([
       this.leave.list({ status: 'PENDING', toDecide: true }),
       this.claims.listOvertime({ status: 'PENDING' }),
       this.claims.listExpenses({ status: 'PENDING' }),
       this.lifecycle.list({ status: 'OPEN', mine: false }),
+      this.fixes.list({ status: 'PENDING' }),
     ]);
     const items = [
       ...leave.map((r) => ({
@@ -398,6 +401,19 @@ export class InboxService {
           summary: r.description,
           at: r.createdAt.toISOString(),
           href: '/claims?tab=expenses',
+        })),
+      ...fixes
+        .filter((r) => r.canDecide)
+        .map((r) => ({
+          kind: 'ATTENDANCE' as const,
+          id: r.id,
+          employee: r.employee,
+          title: `Attendance fix · ${short(r.date)}`,
+          summary: [r.checkIn && `in ${r.checkIn}`, r.checkOut && `out ${r.checkOut}`, r.reason]
+            .filter(Boolean)
+            .join(' · '),
+          at: r.createdAt,
+          href: '/attendance?tab=fixes',
         })),
       ...checklists.flatMap((c) =>
         c.tasks

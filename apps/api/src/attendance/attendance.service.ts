@@ -9,27 +9,23 @@ import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { currentContext } from '../common/request-context';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  eachDay,
-  isoDay,
-  isWeekend,
-  istMinutes,
-  LATE_AFTER_MINUTES,
-  monthRange,
-  todayIst,
-  toDate,
-} from './days';
+import { WorkCalendar, WorkCalendarService } from './calendar';
+import { eachDay, isoDay, monthRange, todayIst, toDate } from './days';
 import { LeaveService, Viewer } from './leave.service';
 
-/** What a register cell shows: a mark, a leave code, W for weekend, or '' when nothing is recorded. */
-type Cell = { code: string; late?: boolean; halfDay?: boolean };
+/**
+ * What a register cell shows: a mark, a leave code, W for a weekly off, H for a holiday (with its
+ * name), or '' when nothing is recorded.
+ */
+type Cell = { code: string; late?: boolean; halfDay?: boolean; title?: string };
 
 /**
  * The attendance register, today's numbers, self check-in and HR's marks.
  *
- * A day's code comes from, in order: the weekend, approved leave covering it, then the
- * attendance record (a check-in or HR's mark). Leave always wins over a record so the register
- * and leave balances can't disagree.
+ * A day's code comes from, in order: the person's weekly off or a holiday, approved leave
+ * covering it, then the attendance record (a check-in, a device punch, an approved fix or HR's
+ * mark). Leave always wins over a record so the register and leave balances can't disagree.
+ * Weekly offs, start times and grace come from the person's shift.
  */
 @Injectable()
 export class AttendanceService {
@@ -37,6 +33,7 @@ export class AttendanceService {
     private readonly prisma: PrismaService,
     private readonly leave: LeaveService,
     private readonly audit: AuditService,
+    private readonly calendar: WorkCalendarService,
   ) {}
 
   async register(q: RegisterQuery) {
@@ -46,12 +43,18 @@ export class AttendanceService {
     const today = todayIst();
     const employees = await this.visibleEmployees(v, start, q.departmentId);
     const ids = employees.map((e) => e.id);
-    const [records, leaves, types] = await Promise.all([
+    const [records, leaves, types, cal, holidays] = await Promise.all([
       this.prisma.db.attendanceRecord.findMany({
         where: { employeeId: { in: ids }, date: { gte: toDate(start), lte: toDate(end) } },
       }),
       this.leave.approvedBetween(ids, start, end),
       this.leave.types(),
+      this.calendar.load(ids, start, end),
+      this.prisma.db.holiday.findMany({
+        where: { date: { gte: toDate(start), lte: toDate(end) } },
+        select: { date: true, name: true, optional: true, location: { select: { name: true } } },
+        orderBy: { date: 'asc' },
+      }),
     ]);
     const days = eachDay(start, end);
 
@@ -59,11 +62,13 @@ export class AttendanceService {
       const joined = isoDay(e.dateOfJoining);
       // Days before someone joined stay blank whatever was recorded.
       const cells: Cell[] = days.map((d) =>
-        d < joined && !isWeekend(d) ? { code: '' } : this.cell(e.id, d, records, leaves),
+        d < joined && cal.isWorking(e.id, d)
+          ? { code: '' }
+          : this.cell(cal, e.id, d, records, leaves),
       );
       const counted = days
         .map((d, i) => ({ d, c: cells[i]! }))
-        .filter(({ d }) => d <= today && !isWeekend(d) && d >= isoDay(e.dateOfJoining));
+        .filter(({ d }) => d <= today && cal.isWorking(e.id, d) && d >= isoDay(e.dateOfJoining));
       const presentCodes = new Set([
         'P',
         ...types.filter((t) => t.countsAsPresent).map((t) => t.code),
@@ -91,6 +96,12 @@ export class AttendanceService {
       days,
       today,
       canMark: v.manage,
+      holidays: holidays.map((h) => ({
+        date: isoDay(h.date),
+        name: h.name,
+        optional: h.optional,
+        location: h.location?.name ?? null,
+      })),
       leaveTypes: types.map((t) => ({
         id: t.id,
         code: t.code,
@@ -109,18 +120,24 @@ export class AttendanceService {
     const today = todayIst();
     const employees = await this.visibleEmployees(v, today);
     const ids = employees.map((e) => e.id);
-    const [records, leaves] = await Promise.all([
+    const [records, leaves, cal] = await Promise.all([
       this.prisma.db.attendanceRecord.findMany({
         where: { employeeId: { in: ids }, date: toDate(today) },
       }),
       this.leave.approvedBetween(ids, today, today),
+      this.calendar.load([...ids, ...(v.self ? [v.self] : [])], today, today),
     ]);
     let present = 0,
       late = 0,
       absent = 0,
       onLeave = 0,
-      field = 0;
+      field = 0,
+      off = 0;
     for (const id of ids) {
+      if (!cal.isWorking(id, today) && !records.some((r) => r.employeeId === id)) {
+        off++;
+        continue;
+      }
       const l = leaves.find((x) => x.employeeId === id);
       if (l) {
         if (l.leaveType.countsAsPresent) field++;
@@ -132,26 +149,36 @@ export class AttendanceService {
       if (r.status === 'A') absent++;
       else {
         present++;
-        if (r.checkIn && istMinutes(r.checkIn) > LATE_AFTER_MINUTES) late++;
+        if (r.checkIn && cal.isLate(id, r.checkIn)) late++;
       }
     }
     const self = v.self ? records.find((r) => r.employeeId === v.self) : undefined;
+    const myShift = v.self ? cal.shiftOf(v.self) : null;
+    const myOff = v.self ? cal.dayOff(v.self, today) : null;
+    const hhmm = (m: number) =>
+      `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
     return {
       date: today,
-      weekend: isWeekend(today),
+      weekend: myOff === 'W',
+      holiday: v.self ? (cal.holiday(v.self, today)?.name ?? null) : null,
+      off,
       headcount: ids.length,
       present,
       late,
       absent,
       onLeave,
       field,
-      notMarked: ids.length - present - absent - onLeave - field,
+      notMarked: ids.length - present - absent - onLeave - field - off,
       me: v.self
         ? {
             employeeId: v.self,
             checkIn: self?.checkIn ?? null,
             checkOut: self?.checkOut ?? null,
             status: self?.status ?? null,
+            late: Boolean(self?.checkIn && cal.isLate(v.self, self.checkIn)),
+            shift: myShift
+              ? { name: myShift.name, start: hhmm(myShift.start), end: hhmm(myShift.end) }
+              : null,
           }
         : null,
     };
@@ -190,9 +217,17 @@ export class AttendanceService {
       where: { employeeId_date: { employeeId: v.self, date: toDate(todayIst()) } },
     });
     if (!existing?.checkIn) throw new BadRequestException('Check in first');
+    const now = new Date();
+    const cal = await this.calendar.load([v.self], todayIst(), todayIst());
     const record = await this.prisma.db.attendanceRecord.update({
       where: { id: existing.id },
-      data: { checkOut: new Date() },
+      data: {
+        checkOut: now,
+        // HR's mark stands; otherwise hours worked decide a full or half day.
+        ...(existing.source === 'HR'
+          ? {}
+          : { status: cal.statusFor(v.self, existing.checkIn, now) }),
+      },
     });
     await this.audit.record('attendance.check_out', 'AttendanceRecord', record.id, {});
     return record;
@@ -210,7 +245,12 @@ export class AttendanceService {
     if (!employee) throw new NotFoundException('Employee not found');
     if (input.date < isoDay(employee.dateOfJoining))
       throw new BadRequestException('That is before they joined');
-    if (isWeekend(input.date)) throw new BadRequestException('That day is a weekend');
+    const cal = await this.calendar.load([input.employeeId], input.date, input.date);
+    const off = cal.dayOff(input.employeeId, input.date);
+    if (off)
+      throw new BadRequestException(
+        off === 'W' ? 'That day is a weekly off for them' : 'That day is a holiday for them',
+      );
     if (input.date > todayIst())
       throw new BadRequestException('You can’t mark a day in the future');
     const date = toDate(input.date);
@@ -294,7 +334,36 @@ export class AttendanceService {
     return { ok: true };
   }
 
+  /**
+   * Writes a day's record from times (device punches or an approved fix). HR's own marks are
+   * left alone unless `override` is set, which an approved fix does.
+   */
+  async applyTimes(
+    employeeId: string,
+    day: string,
+    times: { checkIn: Date | null; checkOut: Date | null },
+    source: 'BIOMETRIC' | 'REGULARISED',
+    note?: string,
+  ) {
+    const date = toDate(day);
+    const existing = await this.prisma.db.attendanceRecord.findFirst({
+      where: { employeeId, date },
+    });
+    if (existing && existing.source === 'HR' && source !== 'REGULARISED') return existing;
+    const checkIn = times.checkIn ?? existing?.checkIn ?? null;
+    const checkOut = times.checkOut ?? existing?.checkOut ?? null;
+    const cal = await this.calendar.load([employeeId], day, day);
+    const status = checkIn && checkOut ? cal.statusFor(employeeId, checkIn, checkOut) : 'P';
+    const data = { checkIn, checkOut, status, source, ...(note ? { note } : {}) };
+    return existing
+      ? this.prisma.db.attendanceRecord.update({ where: { id: existing.id }, data })
+      : this.prisma.db.attendanceRecord.create({
+          data: { ...data, employeeId, date } as Prisma.AttendanceRecordUncheckedCreateInput,
+        });
+  }
+
   private cell(
+    cal: WorkCalendar,
     employeeId: string,
     day: string,
     records: { employeeId: string; date: Date; status: string; checkIn: Date | null }[],
@@ -306,7 +375,9 @@ export class AttendanceService {
       leaveType: { code: string };
     }[],
   ): Cell {
-    if (isWeekend(day)) return { code: 'W' };
+    const off = cal.dayOff(employeeId, day);
+    if (off === 'W') return { code: 'W' };
+    if (off === 'H') return { code: 'H', title: cal.holiday(employeeId, day)?.name };
     const leave = leaves.find(
       (l) => l.employeeId === employeeId && isoDay(l.startDate) <= day && isoDay(l.endDate) >= day,
     );
@@ -315,7 +386,7 @@ export class AttendanceService {
     if (!r) return { code: '' };
     return {
       code: r.status,
-      ...(r.checkIn && istMinutes(r.checkIn) > LATE_AFTER_MINUTES ? { late: true } : {}),
+      ...(r.checkIn && cal.isLate(employeeId, r.checkIn) ? { late: true } : {}),
     };
   }
 

@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { MarkFiledInput, SalaryStructureInput } from '@hrms/shared';
 import { Prisma } from '@prisma/client';
-import { eachDay, isoDay, isWeekend, todayIst, toDate } from '../attendance/days';
+import { WorkCalendarService } from '../attendance/calendar';
+import { eachDay, isoDay, todayIst, toDate } from '../attendance/days';
 import { AuditService } from '../audit/audit.service';
 import { currentContext, requireTenantId } from '../common/request-context';
 import { FieldCrypto } from '../crypto/field-crypto';
@@ -63,6 +64,7 @@ export class PayrollService {
     private readonly access: EmployeeAccess,
     private readonly audit: AuditService,
     private readonly crypto: FieldCrypto,
+    private readonly calendar: WorkCalendarService,
   ) {}
 
   // ---------- salaries ----------
@@ -549,6 +551,12 @@ export class PayrollService {
     ]);
 
     const rows: Prisma.PayslipCreateManyInput[] = [];
+    // Unpaid leave counts only the person's working days, not weekly offs or holidays.
+    const cal = await this.calendar.load(
+      employees.map((e) => e.id),
+      start,
+      end,
+    );
     for (const e of employees) {
       const flags: Flag[] = [];
       const joined = isoDay(e.dateOfJoining);
@@ -578,7 +586,7 @@ export class PayrollService {
           lop += eachDay(
             isoDay(l.startDate) < start ? start : isoDay(l.startDate),
             isoDay(l.endDate) > end ? end : isoDay(l.endDate),
-          ).filter((d) => !isWeekend(d)).length;
+          ).filter((d) => cal.isWorking(e.id, d)).length;
       }
       if (lop)
         flags.push({

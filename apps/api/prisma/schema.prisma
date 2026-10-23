@@ -107,6 +107,11 @@ model Tenant {
   conversations Conversation[]
   conversationMembers ConversationMember[]
   messages      Message[]
+  shifts        Shift[]
+  holidays      Holiday[]
+  regularisations AttendanceRegularisation[]
+  biometricDevices BiometricDevice[]
+  punches       Punch[]
 }
 
 model User {
@@ -206,6 +211,8 @@ model Location {
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employees Employee[]
+  holidays  Holiday[]
+  devices   BiometricDevice[]
 
   @@unique([tenantId, name])
 }
@@ -259,6 +266,9 @@ model Employee {
   departmentId   String?        @db.Uuid
   designationId  String?        @db.Uuid
   locationId     String?        @db.Uuid
+  shiftId        String?        @db.Uuid
+  /// The person's user number on biometric devices.
+  biometricId    String?
   legalEntityId  String?        @db.Uuid
   managerId      String?        @db.Uuid
   /// Values for tenant-defined custom fields (no-code).
@@ -271,6 +281,7 @@ model Employee {
   department  Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   designation Designation?     @relation(fields: [designationId], references: [id], onDelete: SetNull)
   location    Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shift       Shift?           @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   legalEntity LegalEntity?     @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
   manager     Employee?        @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
   reports     Employee[]       @relation("Reports")
@@ -297,10 +308,13 @@ model Employee {
   eventRsvps    EventRsvp[]
   pollVotes     PollVote[]
   pulseParticipations PulseParticipant[]
+  regularisations AttendanceRegularisation[]
+  punches       Punch[]
   conversations ConversationMember[]
   messages      Message[]
 
   @@unique([tenantId, employeeCode])
+  @@unique([tenantId, biometricId])
   @@unique([tenantId, workEmail])
   @@index([tenantId, status])
   @@index([tenantId, departmentId])
@@ -543,6 +557,7 @@ enum AttendanceSource {
   WEB
   BIOMETRIC
   HR
+  REGULARISED
 }
 
 /// A kind of leave the company offers. HR adds and edits these without code.
@@ -1260,4 +1275,123 @@ model Message {
   author       Employee     @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+/// Working hours and weekly offs. One shift per workspace is the default for anyone not assigned.
+model Shift {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  name           String
+  /// Local time in India, "09:30".
+  startTime      String
+  endTime        String
+  /// Check-ins up to this many minutes after the start are on time.
+  graceMinutes   Int      @default(15)
+  /// Minutes worked for a full day and for a half day.
+  fullDayMinutes Int      @default(480)
+  halfDayMinutes Int      @default(240)
+  /// Days of the week off: 0 Sunday to 6 Saturday.
+  weeklyOffs     Int[]    @default([0, 6])
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([tenantId, name])
+}
+
+/// A public holiday. With a location it applies only to people at that location.
+model Holiday {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  date       DateTime  @db.Date
+  name       String
+  /// Optional (restricted) holidays are listed but not days off.
+  optional   Boolean   @default(false)
+  locationId String?   @db.Uuid
+  createdAt  DateTime  @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, date, name])
+  @@index([tenantId, date])
+}
+
+enum RegularisationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// A request to fix a day's attendance: a missed punch or a wrong time.
+model AttendanceRegularisation {
+  id           String               @id @default(uuid()) @db.Uuid
+  tenantId     String               @db.Uuid
+  employeeId   String               @db.Uuid
+  date         DateTime             @db.Date
+  checkIn      DateTime?
+  checkOut     DateTime?
+  reason       String
+  status       RegularisationStatus @default(PENDING)
+  decidedById  String?              @db.Uuid
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime             @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([employeeId, date])
+}
+
+/// A fingerprint or face device that pushes punches. Devices using the ZKTeco/eSSL push
+/// protocol are known by serial number; others call the punch API with their key.
+model BiometricDevice {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  name         String
+  serialNumber String    @unique
+  locationId   String?   @db.Uuid
+  /// SHA-256 of the device's API key; the key itself is shown once.
+  keyHash      String?   @unique
+  keyPrefix    String?
+  active       Boolean   @default(true)
+  lastSeenAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  punches  Punch[]
+}
+
+enum PunchDirection {
+  IN
+  OUT
+  UNKNOWN
+}
+
+/// One raw punch from a device, kept as received. A punch whose device user isn't linked to an
+/// employee yet waits with no employee until HR links them.
+model Punch {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @db.Uuid
+  deviceId     String         @db.Uuid
+  deviceUserId String
+  employeeId   String?        @db.Uuid
+  punchedAt    DateTime
+  direction    PunchDirection @default(UNKNOWN)
+  createdAt    DateTime       @default(now())
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  device   BiometricDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  employee Employee?       @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@unique([deviceId, deviceUserId, punchedAt])
+  @@index([tenantId, employeeId, punchedAt])
+  @@index([tenantId, deviceUserId])
 }

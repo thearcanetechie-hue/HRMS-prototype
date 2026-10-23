@@ -21,6 +21,7 @@ import {
 } from '@hrms/shared';
 import type { Response } from 'express';
 import { z } from 'zod';
+import { AttendanceModule } from '../attendance/attendance.module';
 import { AuditModule } from '../audit/audit.module';
 import { RequirePermissions } from '../auth/decorators';
 import { ZodPipe } from '../common/zod.pipe';
@@ -148,7 +149,7 @@ class PayrollController {
 }
 
 @Module({
-  imports: [AuditModule, EmployeesModule],
+  imports: [AuditModule, EmployeesModule, AttendanceModule],
   controllers: [PayrollController],
   providers: [PayrollService],
 })
