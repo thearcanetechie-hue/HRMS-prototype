@@ -116,6 +116,9 @@ model Tenant {
   leaveYearCloses LeaveYearClose[]
   attendanceMonths AttendanceMonth[]
   policies      Policy[]
+  taxDeclarations TaxDeclaration[]
+  payItems      PayItem[]
+  settlements   Settlement[]
 }
 
 model User {
@@ -315,6 +318,9 @@ model Employee {
   regularisations AttendanceRegularisation[]
   punches       Punch[]
   leaveLedger   LeaveLedger[]
+  taxDeclarations TaxDeclaration[]
+  payItems      PayItem[]
+  settlement    Settlement[]
   conversations ConversationMember[]
   messages      Message[]
 
@@ -857,6 +863,24 @@ model Payslip {
   daysInMonth  Int
   lopDays      Decimal  @default(0) @db.Decimal(5, 1)
   overtimeHours Decimal @default(0) @db.Decimal(5, 1)
+  /// Statutory detail for returns and challans.
+  taxableIncome Int     @default(0)
+  annualTax     Int     @default(0)
+  regime        TaxRegime @default(NEW)
+  eps           Int     @default(0)
+  edli          Int     @default(0)
+  pfAdmin       Int     @default(0)
+  pfWages       Int     @default(0)
+  epsWages      Int     @default(0)
+  esiWages      Int     @default(0)
+  lwf           Int     @default(0)
+  employerLwf   Int     @default(0)
+  bonus         Int     @default(0)
+  /// The salary structure used, and arrears this payslip settled for earlier months.
+  salaryId      String? @db.Uuid
+  arrearsPaid   Json    @default("[]")
+  payItemIds    String[] @db.Uuid
+  encashmentIds String[] @db.Uuid
   /// [{ tag, reason, tone }] things HR should check before locking.
   flags        Json     @default("[]")
   reviewed     Boolean  @default(false)
@@ -1496,4 +1520,107 @@ model Policy {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, key])
+}
+
+enum TaxRegime {
+  NEW
+  OLD
+}
+
+/// Form 12BB declaration for a financial year (April of fyStart to March).
+model TaxDeclaration {
+  id                     String    @id @default(uuid()) @db.Uuid
+  tenantId               String    @db.Uuid
+  employeeId             String    @db.Uuid
+  fyStart                Int
+  regime                 TaxRegime @default(NEW)
+  rentMonthly            Int       @default(0)
+  landlordPan            String?
+  sec80C                 Int       @default(0)
+  sec80D                 Int       @default(0)
+  sec80DParents          Int       @default(0)
+  parentsSenior          Boolean   @default(false)
+  sec80CCD1B             Int       @default(0)
+  homeLoanInterest       Int       @default(0)
+  otherDeductions        Int       @default(0)
+  previousEmployerIncome Int       @default(0)
+  previousEmployerTds    Int       @default(0)
+  /// HR has seen the proofs.
+  verified               Boolean   @default(false)
+  updatedById            String?   @db.Uuid
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, fyStart])
+  @@index([tenantId, fyStart])
+}
+
+enum PayItemKind {
+  BONUS
+  INCENTIVE
+  ARREARS
+  OTHER_EARNING
+  ADVANCE_RECOVERY
+  LOAN_RECOVERY
+  OTHER_DEDUCTION
+  LEAVE_ENCASHMENT
+  GRATUITY
+  NOTICE_PAY
+  NOTICE_RECOVERY
+}
+
+/// A one-off amount on someone's payslip for a month: bonus, arrears, recoveries, settlement items.
+model PayItem {
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @db.Uuid
+  employeeId   String      @db.Uuid
+  /// YYYY-MM
+  month        String
+  kind         PayItemKind
+  label        String
+  amount       Int
+  taxable      Boolean     @default(true)
+  exempt       Int         @default(0)
+  /// Part that counts as PF wages (Basic arrears).
+  pfWages      Int         @default(0)
+  esiWages     Boolean     @default(true)
+  note         String?
+  settlementId String?     @db.Uuid
+  createdById  String?     @db.Uuid
+  createdAt    DateTime    @default(now())
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, month])
+  @@index([employeeId, month])
+}
+
+enum SettlementStatus {
+  DRAFT
+  FINAL
+}
+
+/// Full and final settlement for someone leaving.
+model Settlement {
+  id             String           @id @default(uuid()) @db.Uuid
+  tenantId       String           @db.Uuid
+  employeeId     String           @db.Uuid
+  lastWorkingDay DateTime         @db.Date
+  status         SettlementStatus @default(DRAFT)
+  /// Inputs and the worked figures, kept as calculated.
+  data           Json             @default("{}")
+  createdById    String?          @db.Uuid
+  createdAt      DateTime         @default(now())
+  finalisedAt    DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  items    PayItem[]
+
+  @@unique([employeeId])
 }

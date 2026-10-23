@@ -4,7 +4,11 @@ import request from 'supertest';
 import { addDays, todayIst } from '../src/attendance/days';
 import { addLogin, createApp, signup } from './helpers';
 
-const month = todayIst().slice(0, 7);
+// Last month: a month's attendance can be closed (and so payroll locked) once it has ended.
+const month = (() => {
+  const [y, m] = todayIst().split('-').map(Number) as [number, number];
+  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+})();
 const PDF = Buffer.from('%PDF-1.4\n%%EOF\n');
 
 describe('Payroll', () => {
@@ -86,7 +90,7 @@ describe('Payroll', () => {
       .send({
         employeeId: empId,
         categoryId: travel.id,
-        spentOn: addDays(todayIst(), -1),
+        spentOn: `${month}-15`,
         amount: 1200,
         description: 'Cab',
         receiptDocumentId: receipt.body.id,
@@ -120,7 +124,16 @@ describe('Payroll', () => {
         .post(`/api/payroll/runs/${run.body.id}/payslips/${p.id}/review`)
         .set(owner.auth)
         .expect(200);
+    // Payroll locks only once the month's attendance is closed.
+    await api().post(`/api/payroll/runs/${run.body.id}/lock`).set(owner.auth).expect(400);
+    await api()
+      .post('/api/attendance/close')
+      .set(owner.auth)
+      .send({ month, unmarkedAs: 'P' })
+      .expect(200);
     await api().post(`/api/payroll/runs/${run.body.id}/lock`).set(owner.auth).expect(200);
+    // And attendance can't reopen while payroll is locked.
+    await api().post('/api/attendance/close/reopen').set(owner.auth).send({ month }).expect(400);
     await api().post(`/api/payroll/runs/${run.body.id}/recalculate`).set(owner.auth).expect(400);
 
     const own = await api()
