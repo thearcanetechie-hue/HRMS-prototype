@@ -21,6 +21,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import {
+  BonusCard,
+  DeclarationsCard,
+  MyTaxCard,
+  PayItemsCard,
+  SettlementCard,
+  StatutoryFiles,
+} from '@/components/payroll-compliance';
 import { monthName, PayslipDialog } from '@/components/payslip';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
@@ -113,6 +121,9 @@ function MyPayslips() {
           <Empty>No payslips yet. They appear here once HR runs payroll.</Empty>
         )}
       </Card>
+      <div className="mt-5">
+        <MyTaxCard />
+      </div>
       <Dialog open={open !== null} onOpenChange={(o) => !o && setOpen(null)}>
         {open && <PayslipDialog id={open} />}
       </Dialog>
@@ -255,8 +266,16 @@ function PayrollAdmin() {
             ) : run.status === 'DRAFT' ? (
               <Button
                 variant="primary"
-                disabled={busy || run.unreviewed > 0 || !run.payslips.length}
-                title={run.unreviewed ? 'Review the flagged payslips first' : undefined}
+                disabled={
+                  busy || run.unreviewed > 0 || !run.payslips.length || !run.attendanceClosed
+                }
+                title={
+                  !run.attendanceClosed
+                    ? 'Close this month’s attendance first'
+                    : run.unreviewed
+                      ? 'Review the flagged payslips first'
+                      : undefined
+                }
                 onClick={() =>
                   act(
                     `/payroll/runs/${run.id}/lock`,
@@ -292,6 +311,12 @@ function PayrollAdmin() {
             ]}
             current={current === -1 ? 5 : current}
           />
+          {run && run.status === 'DRAFT' && !run.attendanceClosed && (
+            <p className="mt-4 text-[13px] text-muted-foreground">
+              Payroll locks once {label} attendance is closed, so payslips match the register.{' '}
+              <Link href="/attendance?tab=close">Close attendance</Link>, then recalculate.
+            </p>
+          )}
           {run && run.pendingOvertime + run.pendingClaims > 0 && (
             <p className="mt-4 text-[13px] text-muted-foreground">
               {run.pendingOvertime} overtime and {run.pendingClaims} expense claims still need a
@@ -572,6 +597,21 @@ function PayrollAdmin() {
               </Card>
             )}
           </div>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-2">
+          <PayItemsCard
+            month={month}
+            locked={run?.status === 'LOCKED' || run?.status === 'PAID'}
+            onChanged={showToast}
+          />
+          {run && run.status !== 'DRAFT' ? (
+            <StatutoryFiles runId={run.id} month={month} onToast={showToast} />
+          ) : (
+            <BonusCard month={month} onChanged={showToast} />
+          )}
+          <DeclarationsCard month={month} />
+          <SettlementCard onChanged={showToast} />
         </div>
 
         {run && run.status !== 'DRAFT' && (

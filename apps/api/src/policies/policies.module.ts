@@ -13,6 +13,7 @@ import {
 import {
   attendancePolicySchema,
   leavePolicySchema,
+  payrollPolicySchema,
   type Permission,
   type PolicyKey,
 } from '@hrms/shared';
@@ -30,13 +31,14 @@ export const POLICY_DEFS: Partial<Record<PolicyKey, { schema: z.ZodTypeAny; mana
   {
     attendance: { schema: attendancePolicySchema, manage: 'attendance.manage' },
     leave: { schema: leavePolicySchema, manage: 'attendance.manage' },
+    payroll: { schema: payrollPolicySchema, manage: 'payroll.manage' },
   };
 
 export type PolicyOf<K extends PolicyKey> = K extends 'attendance'
   ? z.infer<typeof attendancePolicySchema>
   : K extends 'leave'
     ? z.infer<typeof leavePolicySchema>
-    : Record<string, unknown>;
+    : z.infer<typeof payrollPolicySchema>;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);

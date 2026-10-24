@@ -4,16 +4,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { MarkFiledInput, SalaryStructureInput } from '@hrms/shared';
+import { MarkFiledInput, type PayrollPolicy, SalaryStructureInput } from '@hrms/shared';
 import { Prisma } from '@prisma/client';
 import { WorkCalendarService } from '../attendance/calendar';
 import { eachDay, isoDay, todayIst, toDate } from '../attendance/days';
+import { latePenaltyDays } from '../attendance/leave-balance';
 import { AuditService } from '../audit/audit.service';
 import { currentContext, requireTenantId } from '../common/request-context';
 import { FieldCrypto } from '../crypto/field-crypto';
 import { EmployeeAccess } from '../employees/employee-access.service';
+import { PolicyService } from '../policies/policies.module';
 import { PrismaService } from '../prisma/prisma.service';
-import { calculate, daysInMonth } from './calc';
+import { blend, calculate, daysInMonth, NO_DECLARATION, type PayItem, structure } from './calc';
 
 type Flag = { tag: string; reason: string; tone: 'warning' | 'danger' | 'accent' | 'info' };
 
@@ -27,10 +29,33 @@ const short = (iso: string) =>
     month: 'short',
     timeZone: 'UTC',
   });
-const nextMonth = (month: string) => {
+const addMonths = (month: string, n: number) => {
   const [y, m] = month.split('-').map(Number) as [number, number];
-  return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
+  return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7);
 };
+const nextMonth = (month: string) => addMonths(month, 1);
+const monthName = (month: string) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-IN', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+const num = (n: number) => n.toLocaleString('en-IN');
+/** April to March of a financial year. */
+export const monthsOfFy = (fyStart: number) =>
+  Array.from({ length: 12 }, (_, i) => addMonths(`${fyStart}-04`, i));
+/** ESI contribution periods run April–September and October–March. */
+export function esiContributionPeriod(month: string) {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  const startM = m >= 4 && m <= 9 ? `${y}-04` : m >= 10 ? `${y}-10` : `${y - 1}-10`;
+  return Array.from({ length: 6 }, (_, i) => addMonths(startM, i));
+}
+const DEDUCTION_KINDS = new Set([
+  'ADVANCE_RECOVERY',
+  'LOAN_RECOVERY',
+  'OTHER_DEDUCTION',
+  'NOTICE_RECOVERY',
+]);
 
 const payslipInclude = {
   employee: {
@@ -65,11 +90,13 @@ export class PayrollService {
     private readonly audit: AuditService,
     private readonly crypto: FieldCrypto,
     private readonly calendar: WorkCalendarService,
+    private readonly policies: PolicyService,
   ) {}
 
   // ---------- salaries ----------
 
   async salaries() {
+    const policy = await this.policies.get('payroll');
     const today = toDate(todayIst());
     const employees = await this.prisma.db.employee.findMany({
       where: { status: { not: 'EXITED' } },
@@ -89,7 +116,7 @@ export class PayrollService {
     });
     return employees.map(({ salaries, ...e }) => ({
       ...e,
-      salary: salaries[0] ? this.presentSalary(salaries[0]) : null,
+      salary: salaries[0] ? this.presentSalary(policy, salaries[0]) : null,
     }));
   }
 
@@ -97,6 +124,7 @@ export class PayrollService {
     const self = await this.access.isSelf(employeeId);
     if (!self && !this.access.can('payroll.manage'))
       throw new NotFoundException('Salary not found');
+    const policy = await this.policies.get('payroll');
     const rows = await this.prisma.db.salaryStructure.findMany({
       where: { employeeId },
       orderBy: { effectiveFrom: 'desc' },
@@ -104,9 +132,12 @@ export class PayrollService {
     const today = todayIst();
     return {
       current: rows.find((r) => isoDay(r.effectiveFrom) <= today)
-        ? this.presentSalary(rows.find((r) => isoDay(r.effectiveFrom) <= today)!)
+        ? this.presentSalary(
+            policy,
+            rows.find((r) => isoDay(r.effectiveFrom) <= today)!,
+          )
         : null,
-      history: rows.map((r) => this.presentSalary(r)),
+      history: rows.map((r) => this.presentSalary(policy, r)),
     };
   }
 
@@ -135,25 +166,22 @@ export class PayrollService {
     await this.audit.record('payroll.salary_set', 'Employee', employeeId, {
       effectiveFrom: input.effectiveFrom,
     });
-    return this.presentSalary(row);
+    return this.presentSalary(await this.policies.get('payroll'), row);
   }
 
-  private presentSalary(s: {
-    annualCtc: number;
-    basicPercent: number;
-    metro: boolean;
-    effectiveFrom: Date;
-    id: string;
-  }) {
-    const p = calculate(
-      { annualCtc: s.annualCtc, basicShare: s.basicPercent / 100, metro: s.metro, state: null },
-      {
-        month: todayIst().slice(0, 7),
-        daysEmployed: 31,
-        lopDays: 0,
-        overtimeHours: 0,
-        reimbursements: 0,
-      },
+  private presentSalary(
+    policy: PayrollPolicy,
+    s: {
+      annualCtc: number;
+      basicPercent: number;
+      metro: boolean;
+      effectiveFrom: Date;
+      id: string;
+    },
+  ) {
+    const full = structure(
+      { annualCtc: s.annualCtc, basicShare: s.basicPercent / 100, metro: s.metro },
+      policy,
     );
     return {
       id: s.id,
@@ -161,7 +189,7 @@ export class PayrollService {
       basicPercent: s.basicPercent,
       metro: s.metro,
       effectiveFrom: isoDay(s.effectiveFrom),
-      monthlyGross: p.fullGross,
+      monthlyGross: full.gross,
     };
   }
 
@@ -213,8 +241,14 @@ export class PayrollService {
       }),
     ]);
     const shaped = payslips.map((p) => this.presentPayslip(p));
+    const attendanceClosed = Boolean(
+      await this.prisma.db.attendanceMonth.findFirst({
+        where: { month: run.month, status: 'CLOSED' },
+      }),
+    );
     return {
       ...run,
+      attendanceClosed,
       payslips: shaped,
       pendingOvertime,
       pendingClaims,
@@ -223,8 +257,8 @@ export class PayrollService {
       split: {
         net: shaped.reduce((n, p) => n + p.net - p.reimbursements, 0),
         tds: shaped.reduce((n, p) => n + p.tds, 0),
-        pf: shaped.reduce((n, p) => n + p.pf + p.employerPf, 0),
-        esiPt: shaped.reduce((n, p) => n + p.esi + p.employerEsi + p.pt, 0),
+        pf: shaped.reduce((n, p) => n + p.pf + p.employerPf + p.edli + p.pfAdmin, 0),
+        esiPt: shaped.reduce((n, p) => n + p.esi + p.employerEsi + p.pt + p.lwf + p.employerLwf, 0),
         reimbursements: shaped.reduce((n, p) => n + p.reimbursements, 0),
       },
     };
@@ -248,6 +282,13 @@ export class PayrollService {
     if (!run.payslips.length) throw new BadRequestException('There is no one to pay this month');
     if (run.unreviewed)
       throw new BadRequestException(`Review the ${run.unreviewed} flagged payslips first`);
+    const attendance = await this.prisma.db.attendanceMonth.findFirst({
+      where: { month: run.month, status: 'CLOSED' },
+    });
+    if (!attendance)
+      throw new BadRequestException(
+        `Close ${monthName(run.month)} attendance first, so payslips match the register`,
+      );
     await this.prisma.db.payrollRun.update({
       where: { id },
       data: { status: 'LOCKED', lockedAt: new Date() },
@@ -277,7 +318,7 @@ export class PayrollService {
       throw new BadRequestException('Lock the run before marking it paid');
     const payslips = await this.prisma.db.payslip.findMany({
       where: { runId: id },
-      select: { claimIds: true, overtimeIds: true },
+      select: { claimIds: true, overtimeIds: true, encashmentIds: true },
     });
     const now = new Date();
     await this.prisma.$transaction(async (tx) => {
@@ -297,6 +338,13 @@ export class PayrollService {
           status: 'APPROVED',
         },
         data: { status: 'PAID' },
+      });
+      await tx.leaveLedger.updateMany({
+        where: {
+          id: { in: payslips.flatMap((p) => p.encashmentIds) },
+          tenantId: requireTenantId(),
+        },
+        data: { paidInRunId: id },
       });
     });
     await this.audit.record('payroll.run_paid', 'PayrollRun', id, { month: run.month });
@@ -495,11 +543,24 @@ export class PayrollService {
     return run;
   }
 
-  /** Rebuilds every payslip in a draft run from current data. */
+  /**
+   * Rebuilds every payslip in a draft run from current data: salary (split across a mid-month
+   * change), unpaid days (absences, unpaid leave, late-mark penalties), approved overtime and
+   * claims, one-off pay items, arrears for back-dated raises, leave encashment, ESI coverage for
+   * the contribution period, and TDS from the year so far and the person's declaration.
+   */
   private async compute(runId: string, month: string) {
     const { start, end } = monthBounds(month);
     const startD = toDate(start);
     const endD = toDate(end);
+    const [policy, attendancePolicy, leavePolicy] = await Promise.all([
+      this.policies.get('payroll'),
+      this.policies.get('attendance'),
+      this.policies.get('leave'),
+    ]);
+    const fyStart =
+      Number(month.slice(5, 7)) >= 4 ? Number(month.slice(0, 4)) : Number(month.slice(0, 4)) - 1;
+    const fyMonths = monthsOfFy(fyStart);
     const employees = await this.prisma.db.employee.findMany({
       where: {
         dateOfJoining: { lte: endD },
@@ -513,22 +574,17 @@ export class PayrollService {
         dateOfExit: true,
         status: true,
         location: { select: { state: true } },
-        salaries: {
-          where: { effectiveFrom: { lte: endD } },
-          orderBy: { effectiveFrom: 'desc' },
-          take: 1,
-        },
+        profile: { select: { dateOfBirth: true, uanEnc: true, panEnc: true } },
+        salaries: { where: { effectiveFrom: { lte: endD } }, orderBy: { effectiveFrom: 'asc' } },
+        taxDeclarations: { where: { fyStart } },
       },
     });
     const ids = employees.map((e) => e.id);
-    const [records, leaves, overtime, claims] = await Promise.all([
+    const esiPeriod = esiContributionPeriod(month);
+    const [records, leaves, overtime, claims, items, encash, history, cal] = await Promise.all([
       this.prisma.db.attendanceRecord.findMany({
-        where: {
-          employeeId: { in: ids },
-          date: { gte: startD, lte: endD },
-          status: { in: ['A', 'HD'] },
-        },
-        select: { employeeId: true, status: true },
+        where: { employeeId: { in: ids }, date: { gte: startD, lte: endD } },
+        select: { employeeId: true, status: true, date: true, checkIn: true },
       }),
       this.prisma.db.leaveRequest.findMany({
         where: {
@@ -548,15 +604,30 @@ export class PayrollService {
         where: { employeeId: { in: ids }, status: 'APPROVED', spentOn: { lte: endD } },
         select: { id: true, employeeId: true, amount: true },
       }),
+      this.prisma.db.payItem.findMany({ where: { employeeId: { in: ids }, month } }),
+      this.prisma.db.leaveLedger.findMany({
+        where: { employeeId: { in: ids }, kind: 'ENCASHED', paidInRunId: null },
+      }),
+      // Earlier payslips: this financial year for TDS, the ESI period, and arrears look-back.
+      this.prisma.db.payslip.findMany({
+        where: {
+          employeeId: { in: ids },
+          runId: { not: runId },
+          run: {
+            month: {
+              lt: month,
+              gte: [fyMonths[0]!, esiPeriod[0]!, addMonths(month, -12)].sort()[0]!,
+            },
+          },
+        },
+        include: { run: { select: { month: true, status: true } } },
+      }),
+      this.calendar.load(ids, start, end),
     ]);
 
     const rows: Prisma.PayslipCreateManyInput[] = [];
-    // Unpaid leave counts only the person's working days, not weekly offs or holidays.
-    const cal = await this.calendar.load(
-      employees.map((e) => e.id),
-      start,
-      end,
-    );
+    const tenantId = requireTenantId();
+    const dim = daysInMonth(month);
     for (const e of employees) {
       const flags: Flag[] = [];
       const joined = isoDay(e.dateOfJoining);
@@ -568,18 +639,20 @@ export class PayrollService {
         flags.push({
           tag: 'New joiner',
           tone: 'accent',
-          reason: `Joined ${short(joined)}, pay for ${daysEmployed} of ${daysInMonth(month)} days`,
+          reason: `Joined ${short(joined)}, pay for ${daysEmployed} of ${dim} days`,
         });
       if (exit && exit <= end)
         flags.push({
           tag: 'Exit',
           tone: 'danger',
-          reason: `Last working day ${short(exit)}, prorate and settle full and final`,
+          reason: `Last working day ${short(exit)}. Check the full and final settlement.`,
         });
 
+      // ---- unpaid days
       let lop = 0;
-      for (const r of records.filter((x) => x.employeeId === e.id))
-        lop += r.status === 'HD' ? 0.5 : 1;
+      const mine = records.filter((x) => x.employeeId === e.id);
+      for (const r of mine)
+        if (r.status === 'A' || r.status === 'HD') lop += r.status === 'HD' ? 0.5 : 1;
       for (const l of leaves.filter((x) => x.employeeId === e.id)) {
         if (l.halfDay) lop += 0.5;
         else
@@ -588,62 +661,257 @@ export class PayrollService {
             isoDay(l.endDate) > end ? end : isoDay(l.endDate),
           ).filter((d) => cal.isWorking(e.id, d)).length;
       }
+      const lates = mine.filter(
+        (r) => r.checkIn && cal.isWorking(e.id, isoDay(r.date)) && cal.isLate(e.id, r.checkIn),
+      ).length;
+      const latePenalty = latePenaltyDays(
+        lates,
+        attendancePolicy.latePenalty.latesPerHalfDay,
+        attendancePolicy.latePenalty.enabled,
+      );
+      lop += latePenalty;
       if (lop)
         flags.push({
           tag: 'Loss of pay',
           tone: 'warning',
-          reason: `${lop} unpaid ${lop === 1 ? 'day' : 'days'} (absent or unpaid leave)`,
+          reason: `${lop} unpaid ${lop === 1 ? 'day' : 'days'} (absent or unpaid leave${latePenalty ? `, ${latePenalty} for ${lates} late marks` : ''})`,
         });
 
       const ot = overtime.filter((x) => x.employeeId === e.id);
       const cl = claims.filter((x) => x.employeeId === e.id);
       const overtimeHours = ot.reduce((n, x) => n + Number(x.hours), 0);
       const reimbursements = cl.reduce((n, x) => n + x.amount, 0);
-      const salary = e.salaries[0];
+      const base = {
+        tenantId,
+        runId,
+        employeeId: e.id,
+        daysInMonth: dim,
+        lopDays: lop,
+        overtimeHours,
+      };
 
-      if (!salary) {
+      // ---- salary, split across a change during the month
+      const applicable = (day: string) =>
+        [...e.salaries].reverse().find((s) => isoDay(s.effectiveFrom) <= day);
+      const current = applicable(to);
+      if (!current) {
         flags.unshift({ tag: 'No salary', tone: 'danger', reason: 'Set a salary before paying' });
         rows.push({
-          tenantId: requireTenantId(),
-          runId,
-          employeeId: e.id,
+          ...base,
           lines: [],
           gross: 0,
           deductions: 0,
           net: 0,
           reimbursements: 0,
           payableDays: 0,
-          daysInMonth: daysInMonth(month),
-          lopDays: lop,
-          overtimeHours,
           flags,
           claimIds: [],
           overtimeIds: [],
         });
         continue;
       }
+      const toInput = (s: typeof current) => ({
+        annualCtc: s.annualCtc,
+        basicShare: s.basicPercent / 100,
+        metro: s.metro,
+      });
+      const changes = e.salaries.filter(
+        (s) => isoDay(s.effectiveFrom) > from && isoDay(s.effectiveFrom) <= to,
+      );
+      let full = structure(toInput(current), policy);
+      if (changes.length) {
+        const cuts = [from, ...changes.map((s) => isoDay(s.effectiveFrom))];
+        full = blend(
+          cuts.map((c, i) => {
+            const next = cuts[i + 1];
+            const segEnd = next ? isoDay(new Date(toDate(next).getTime() - 86_400_000)) : to;
+            return {
+              structure: structure(toInput(applicable(c)!), policy),
+              days: eachDay(c, segEnd).length,
+            };
+          }),
+        );
+        flags.push({
+          tag: 'Salary change',
+          tone: 'info',
+          reason: `New salary from ${short(isoDay(changes[changes.length - 1]!.effectiveFrom))}, paid by days`,
+        });
+      }
+
+      // ---- one-off items, arrears and leave encashment
+      const payItems: PayItem[] = items
+        .filter((i) => i.employeeId === e.id)
+        .map((i) => ({
+          label: i.label,
+          amount: i.amount,
+          kind: DEDUCTION_KINDS.has(i.kind) ? 'deduction' : 'earning',
+          taxable: i.taxable,
+          exempt: i.exempt,
+          pfWages: i.pfWages,
+          esiWages: i.esiWages,
+        }));
+      const past = history.filter((h) => h.employeeId === e.id);
+      const settled = new Set(
+        past.flatMap((h) => (h.arrearsPaid as { month: string }[]).map((a) => a.month)),
+      );
+      const arrearsPaid: { month: string; amount: number }[] = [];
+      for (const h of past.filter(
+        (x) =>
+          x.run.month >= addMonths(month, -12) &&
+          x.run.status !== 'DRAFT' &&
+          !settled.has(x.run.month),
+      )) {
+        const now = applicable(`${h.run.month}-01`);
+        if (!now || !h.salaryId || now.id === h.salaryId) continue;
+        const regularKeys = new Set([
+          'basic',
+          'hra',
+          'special',
+          ...policy.components.fixedAllowances.map((a) => a.key),
+        ]);
+        const paidLines = (h.lines as { key: string; amount: number }[]).filter((l) =>
+          regularKeys.has(l.key),
+        );
+        const paid = paidLines.reduce((n, l) => n + l.amount, 0);
+        const paidBasic = paidLines.find((l) => l.key === 'basic')?.amount ?? 0;
+        const s = structure(toInput(now), policy);
+        const shareThen = Number(h.payableDays) / h.daysInMonth;
+        const due = Math.round(s.gross * shareThen) - paid;
+        if (due > 0) {
+          payItems.push({
+            label: `Arrears for ${monthName(h.run.month)}`,
+            amount: due,
+            kind: 'earning',
+            taxable: true,
+            exempt: 0,
+            pfWages: Math.max(0, Math.round(s.basic * shareThen) - paidBasic),
+            esiWages: true,
+          });
+          arrearsPaid.push({ month: h.run.month, amount: due });
+        }
+      }
+      if (arrearsPaid.length)
+        flags.push({
+          tag: 'Arrears',
+          tone: 'info',
+          reason: `Back-dated raise: arrears for ${arrearsPaid.map((a) => monthName(a.month)).join(', ')}`,
+        });
+      const myEncash = encash.filter((x) => x.employeeId === e.id);
+      if (myEncash.length) {
+        const days = myEncash.reduce((n, x) => n - Number(x.days), 0);
+        const perDay =
+          (leavePolicy.encashment.basis === 'BASIC' ? full.basic : full.gross) /
+          leavePolicy.encashment.divisor;
+        payItems.push({
+          label: `Leave encashment (${days} days)`,
+          amount: Math.round(days * perDay),
+          kind: 'earning',
+          taxable: true,
+          exempt: 0,
+          pfWages: 0,
+          esiWages: false,
+        });
+      }
+
+      // ---- ESI: covered if wages are under the ceiling, or covered earlier in this contribution period
+      const coveredEarlier = past.some(
+        (h) => esiPeriod.includes(h.run.month) && h.run.month < month && h.esiWages > 0,
+      );
+      const esiCovered = policy.esi.enabled && (full.esiApplies || coveredEarlier);
+
+      // ---- income tax
+      const ytdSlips = past.filter((h) => fyMonths.includes(h.run.month) && h.run.month < month);
+      const decl = e.taxDeclarations[0];
+      const regime = (decl?.regime ?? policy.tds.defaultRegime) as 'NEW' | 'OLD';
+      const fyEnd = `${fyStart + 1}-03`;
+      const monthsAfter =
+        exit && exit <= end ? 0 : Math.max(0, fyMonths.indexOf(fyEnd) - fyMonths.indexOf(month));
+      const dob = e.profile?.dateOfBirth ? isoDay(e.profile.dateOfBirth) : null;
+      const age = dob
+        ? fyStart +
+          1 -
+          Number(dob.slice(0, 4)) -
+          (`${fyStart + 1}-03-31`.slice(5) < dob.slice(5) ? 1 : 0)
+        : 30;
+
       const p = calculate(
         {
-          annualCtc: salary.annualCtc,
-          basicShare: salary.basicPercent / 100,
-          metro: salary.metro,
+          month,
+          full,
+          metro: current.metro,
+          daysEmployed,
+          lopDays: lop,
+          overtimeHours,
+          reimbursements,
+          items: payItems,
           state: e.location?.state ?? null,
+          esiCovered,
+          tax: {
+            regime,
+            age,
+            ytd: {
+              taxable: ytdSlips.reduce((n, h) => n + h.taxableIncome, 0),
+              tds: ytdSlips.reduce((n, h) => n + h.tds, 0),
+              pt: ytdSlips.reduce((n, h) => n + h.pt, 0),
+              pf: ytdSlips.reduce((n, h) => n + h.pf, 0),
+              months: ytdSlips.length,
+            },
+            monthsAfter,
+            declaration: decl ? { ...NO_DECLARATION, ...decl } : NO_DECLARATION,
+          },
         },
-        { month, daysEmployed, lopDays: lop, overtimeHours, reimbursements },
+        policy,
       );
       if (p.esiApplies)
-        flags.push({ tag: 'ESI', tone: 'warning', reason: `Gross under ₹ 21,000, so ESI applies` });
+        flags.push({
+          tag: 'ESI',
+          tone: 'warning',
+          reason: full.esiApplies
+            ? `Wages up to ₹ ${num(policy.esi.wageCeiling)}, so ESI applies`
+            : 'Covered earlier in this ESI contribution period',
+        });
       if (!e.location?.state)
         flags.push({
           tag: 'No state',
           tone: 'info',
-          reason: 'Set their work location’s state for professional tax',
+          reason: 'Set their work location’s state for professional tax and LWF',
         });
+      if (p.pf > 0 && !e.profile?.uanEnc)
+        flags.push({
+          tag: 'No UAN',
+          tone: 'warning',
+          reason: 'Add their UAN for the PF return (ECR)',
+        });
+      if (p.tds > 0 && !e.profile?.panEnc)
+        flags.push({
+          tag: 'No PAN',
+          tone: 'danger',
+          reason: 'Without a PAN, TDS must be at least 20% (s.206AA). Add their PAN.',
+        });
+      if (!decl && month.slice(5) !== '04' && p.annualTax > 0)
+        flags.push({
+          tag: 'No declaration',
+          tone: 'info',
+          reason: `Taxed under the ${regime === 'NEW' ? 'new' : 'old'} regime with no investment declaration`,
+        });
+      // Someone employed before April with no earlier payslips here: tax would be under-deducted
+      // unless the year's salary and TDS so far (from a previous payroll system) are entered.
+      if (
+        joined < `${fyStart}-04-01` &&
+        month !== `${fyStart}-04` &&
+        !ytdSlips.length &&
+        !decl?.previousEmployerIncome
+      )
+        flags.push({
+          tag: 'Year to date missing',
+          tone: 'warning',
+          reason:
+            'No earlier payslips this financial year. Add the year’s salary and TDS so far in their tax declaration, or TDS will be too low.',
+        });
+
       rows.push({
-        tenantId: requireTenantId(),
-        runId,
-        employeeId: e.id,
-        lines: p.lines,
+        ...base,
+        lines: p.lines as unknown as Prisma.InputJsonValue,
         gross: p.gross,
         deductions: p.deductions,
         net: p.net,
@@ -655,39 +923,59 @@ export class PayrollService {
         employerEsi: p.employerEsi,
         reimbursements: p.reimbursements,
         payableDays: p.payableDays,
-        daysInMonth: p.daysInMonth,
-        lopDays: lop,
-        overtimeHours,
         flags,
         claimIds: cl.map((x) => x.id),
         overtimeIds: ot.map((x) => x.id),
+        taxableIncome: p.taxableIncome,
+        annualTax: p.annualTax,
+        regime,
+        eps: p.eps,
+        edli: p.edli,
+        pfAdmin: p.pfAdmin,
+        pfWages: p.pfWages,
+        epsWages: p.epsWages,
+        esiWages: p.esiWages,
+        lwf: p.lwf,
+        employerLwf: p.employerLwf,
+        bonus: p.bonus,
+        salaryId: current.id,
+        arrearsPaid,
+        payItemIds: items.filter((i) => i.employeeId === e.id).map((i) => i.id),
+        encashmentIds: myEncash.map((x) => x.id),
       });
     }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.payslip.deleteMany({ where: { runId } });
       if (rows.length) await tx.payslip.createMany({ data: rows });
-      const sum = (k: 'gross' | 'net') => rows.reduce((n, r) => n + (r[k] as number), 0);
-      const statutory = rows.reduce(
-        (n, r) =>
-          n +
-          (r.pf ?? 0) +
-          (r.employerPf ?? 0) +
-          (r.esi ?? 0) +
-          (r.employerEsi ?? 0) +
-          (r.pt ?? 0) +
-          (r.tds ?? 0),
-        0,
-      );
+      const sum = (f: (r: Prisma.PayslipCreateManyInput) => number) =>
+        rows.reduce((n, r) => n + f(r), 0);
       await tx.payrollRun.update({
         where: { id: runId },
         data: {
-          gross: sum('gross'),
-          net: sum('net'),
-          statutory,
-          ctc: rows.reduce(
-            (n, r) => n + (r.gross as number) + (r.employerPf ?? 0) + (r.employerEsi ?? 0),
-            0,
+          gross: sum((r) => r.gross),
+          net: sum((r) => r.net),
+          statutory: sum(
+            (r) =>
+              (r.pf ?? 0) +
+              (r.employerPf ?? 0) +
+              (r.edli ?? 0) +
+              (r.pfAdmin ?? 0) +
+              (r.esi ?? 0) +
+              (r.employerEsi ?? 0) +
+              (r.pt ?? 0) +
+              (r.lwf ?? 0) +
+              (r.employerLwf ?? 0) +
+              (r.tds ?? 0),
+          ),
+          ctc: sum(
+            (r) =>
+              r.gross +
+              (r.employerPf ?? 0) +
+              (r.edli ?? 0) +
+              (r.pfAdmin ?? 0) +
+              (r.employerEsi ?? 0) +
+              (r.employerLwf ?? 0),
           ),
         },
       });
@@ -720,6 +1008,15 @@ export class PayrollService {
       tds: p.tds,
       employerPf: p.employerPf,
       employerEsi: p.employerEsi,
+      eps: p.eps,
+      edli: p.edli,
+      pfAdmin: p.pfAdmin,
+      lwf: p.lwf,
+      employerLwf: p.employerLwf,
+      bonus: p.bonus,
+      regime: p.regime,
+      annualTax: p.annualTax,
+      taxableIncome: p.taxableIncome,
       reimbursements: p.reimbursements,
       payableDays: Number(p.payableDays),
       daysInMonth: p.daysInMonth,

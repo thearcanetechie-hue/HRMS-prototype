@@ -23,6 +23,9 @@ import type { Response } from 'express';
 import { z } from 'zod';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { AuditModule } from '../audit/audit.module';
+import { PoliciesModule } from '../policies/policies.module';
+import { StatutoryController } from './statutory.controller';
+import { StatutoryService } from './statutory.service';
 import { RequirePermissions } from '../auth/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import { EmployeesModule } from '../employees/employees.module';
@@ -149,8 +152,8 @@ class PayrollController {
 }
 
 @Module({
-  imports: [AuditModule, EmployeesModule, AttendanceModule],
-  controllers: [PayrollController],
-  providers: [PayrollService],
+  imports: [AuditModule, EmployeesModule, AttendanceModule, PoliciesModule],
+  controllers: [PayrollController, StatutoryController],
+  providers: [PayrollService, StatutoryService],
 })
 export class PayrollModule {}
