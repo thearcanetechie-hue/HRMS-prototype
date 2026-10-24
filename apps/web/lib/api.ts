@@ -524,6 +524,7 @@ export interface PayrollRunData {
   pendingClaims: number;
   flagged: number;
   unreviewed: number;
+  attendanceClosed: boolean;
   split: { net: number; tds: number; pf: number; esiPt: number; reimbursements: number };
 }
 
