@@ -360,7 +360,8 @@ function Actions({ children, busy }: { children: ReactNode; busy?: boolean }) {
 // ---------------------------------------------------------------- statutory bonus
 
 export function BonusCard({ month, onChanged }: { month: string; onChanged: (m: string) => void }) {
-  const fy = fyOf(month) - (Number(month.slice(5)) < 10 ? 1 : 0);
+  // Bonus is for the last completed financial year, paid within eight months of its end (s.19).
+  const fy = fyOf(month) - 1;
   const [preview, setPreview] = useState<{
     people: { employee: { firstName: string; lastName: string }; amount: number }[];
     total: number;
@@ -722,8 +723,12 @@ const DECL_FIELDS: [keyof MyDeclaration, string, string][] = [
   ['sec80CCD1B', 'NPS, section 80CCD(1B)', 'Up to ₹ 50,000'],
   ['homeLoanInterest', 'Home loan interest, section 24(b)', 'Self-occupied, up to ₹ 2 lakh'],
   ['otherDeductions', 'Other deductions', '80E, 80G, 80TTA…'],
-  ['previousEmployerIncome', 'Salary from an earlier employer this year', 'Form 12B'],
-  ['previousEmployerTds', 'TDS by that employer', ''],
+  [
+    'previousEmployerIncome',
+    'Salary this year from an earlier employer or payroll system',
+    'Form 12B',
+  ],
+  ['previousEmployerTds', 'TDS already deducted on it', ''],
 ];
 
 export function MyTaxCard() {
@@ -795,21 +800,24 @@ export function MyTaxCard() {
             {inr(cmp.oldTax)} a year. The {cmp.better === 'NEW' ? 'new' : 'old'} regime costs less.
           </p>
         )}
-        {d.regime === 'OLD' && (
+        {
           <div className="grid gap-4 sm:grid-cols-2">
-            {DECL_FIELDS.map(([k, label, help]) => (
-              <Field key={k} id={`tx-${k}`} label={label}>
-                <Input
-                  id={`tx-${k}`}
-                  type="number"
-                  min={0}
-                  value={String(d[k] ?? 0)}
-                  onChange={(e) => set(k, Number(e.target.value) || 0)}
-                  title={help}
-                />
-              </Field>
-            ))}
-            {(d.rentMonthly ?? 0) * 12 > 1_00_000 && (
+            {/* Deductions only matter under the old regime; earlier salary and TDS count under both. */}
+            {DECL_FIELDS.filter(([k]) => d.regime === 'OLD' || k.startsWith('previous')).map(
+              ([k, label, help]) => (
+                <Field key={k} id={`tx-${k}`} label={label}>
+                  <Input
+                    id={`tx-${k}`}
+                    type="number"
+                    min={0}
+                    value={String(d[k] ?? 0)}
+                    onChange={(e) => set(k, Number(e.target.value) || 0)}
+                    title={help}
+                  />
+                </Field>
+              ),
+            )}
+            {d.regime === 'OLD' && (d.rentMonthly ?? 0) * 12 > 1_00_000 && (
               <Field id="tx-ll" label="Landlord’s PAN (rent over ₹ 1 lakh a year)">
                 <Input
                   id="tx-ll"
@@ -819,7 +827,7 @@ export function MyTaxCard() {
               </Field>
             )}
           </div>
-        )}
+        }
         {d.regime === 'OLD' && (
           <ToggleRow
             title="Parents are senior citizens"

@@ -894,6 +894,20 @@ export class PayrollService {
           tone: 'info',
           reason: `Taxed under the ${regime === 'NEW' ? 'new' : 'old'} regime with no investment declaration`,
         });
+      // Someone employed before April with no earlier payslips here: tax would be under-deducted
+      // unless the year's salary and TDS so far (from a previous payroll system) are entered.
+      if (
+        joined < `${fyStart}-04-01` &&
+        month !== `${fyStart}-04` &&
+        !ytdSlips.length &&
+        !decl?.previousEmployerIncome
+      )
+        flags.push({
+          tag: 'Year to date missing',
+          tone: 'warning',
+          reason:
+            'No earlier payslips this financial year. Add the year’s salary and TDS so far in their tax declaration, or TDS will be too low.',
+        });
 
       rows.push({
         ...base,
