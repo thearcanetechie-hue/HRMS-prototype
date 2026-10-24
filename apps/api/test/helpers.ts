@@ -23,7 +23,14 @@ export async function signup(app: INestApplication, workspace = `acme-${suffix()
   const email = `owner@${workspace}.test`;
   const res = await request(app.getHttpServer())
     .post('/api/auth/signup')
-    .send({ companyName: 'Acme Pvt Ltd', workspace, fullName: 'Ada Lovelace', email, password })
+    .send({
+      companyName: 'Acme Pvt Ltd',
+      workspace,
+      fullName: 'Ada Lovelace',
+      email,
+      password,
+      acceptTerms: true,
+    })
     .expect(201);
   return {
     workspace,

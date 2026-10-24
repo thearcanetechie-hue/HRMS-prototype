@@ -21,6 +21,8 @@ export interface AuthUser {
   email: string;
   fullName: string;
   permissions: Permission[];
+  /** The sign-in this request belongs to. */
+  sessionId?: string;
 }
 
 export const CurrentUser = createParamDecorator(
