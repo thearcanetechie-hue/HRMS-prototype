@@ -118,7 +118,7 @@ export default function AccountSecurityPage() {
                 <CardDescription>
                   {a.passwordChangedAt
                     ? `Last changed ${formatDate(a.passwordChangedAt)}`
-                    : 'Signed in with an invite or provider'}
+                    : 'No change on record'}
                 </CardDescription>
               </div>
               <Button size="sm" onClick={() => setDialog('password')}>

@@ -407,7 +407,7 @@ export class AuthService {
     return [...families.entries()].map(([familyId, r]) => ({
       id: familyId,
       device: describeDevice(r.userAgent),
-      ip: r.ip,
+      ip: r.ip?.replace(/^::ffff:/, '') ?? null,
       lastActiveAt: r.createdAt.toISOString(),
       expiresAt: r.expiresAt.toISOString(),
       persistent: r.persistent,
