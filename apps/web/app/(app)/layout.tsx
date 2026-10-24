@@ -18,6 +18,8 @@ import {
   Menu as MenuIcon,
   Network,
   Plug,
+  MailWarning,
+  ShieldCheck,
   SlidersHorizontal,
   Receipt,
   Settings,
@@ -28,7 +30,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { ThemeToggle } from '@/components/theme';
@@ -117,7 +119,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
         href: '/policies',
         label: 'Policies',
         icon: SlidersHorizontal,
-        show: (can) => can('attendance.manage') || can('payroll.manage'),
+        show: (can) => can('attendance.manage') || can('payroll.manage') || can('tenant.manage'),
       },
     ],
   },
@@ -160,6 +162,14 @@ function UserCard() {
               <ThemeToggle />
             </div>
             <Menu.Item
+              asChild
+              className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 font-semibold outline-none data-[highlighted]:bg-surface-2 [&_svg]:size-4"
+            >
+              <Link href="/account/security" className="text-foreground no-underline">
+                <ShieldCheck /> Sign-in and security
+              </Link>
+            </Menu.Item>
+            <Menu.Item
               onSelect={signOut}
               className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 font-semibold text-danger outline-none data-[highlighted]:bg-surface-2 [&_svg]:size-4"
             >
@@ -185,6 +195,13 @@ function Shell({ children }: { children: ReactNode }) {
       .catch(() => undefined);
   }, [pathname]);
   const inboxCount = counts.unread + counts.approvals;
+  const router = useRouter();
+  const security = me.security;
+  // A company that requires two-step sign-in sends people to turn it on before anything else.
+  const mustSetUpMfa = Boolean(security?.mfaRequired && !security.mfaEnabled);
+  useEffect(() => {
+    if (mustSetUpMfa && pathname !== '/account/security') router.replace('/account/security');
+  }, [mustSetUpMfa, pathname, router]);
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[264px_1fr]">
@@ -286,6 +303,18 @@ function Shell({ children }: { children: ReactNode }) {
               <Avatar initials={toInitials(me.user.fullName)} className="hidden sm:grid" />
             </div>
           </div>
+          {security && !security.emailVerified && pathname !== '/account/security' && (
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-warning/10 px-4 py-3 text-[13.5px] text-warning">
+              <MailWarning className="size-4" />
+              <span className="grow">
+                Confirm your email ({me.user.email}) so you can reset your password if you forget
+                it.
+              </span>
+              <Link href="/account/security" className="font-bold">
+                Resend the link
+              </Link>
+            </div>
+          )}
           <div>{children}</div>
         </div>
       </main>

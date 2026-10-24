@@ -75,6 +75,7 @@ export interface Me {
   user: { id: string; email: string; fullName: string; permissions: string[] };
   tenant: { id: string; name: string; slug: string; status: string };
   employee: { id: string; employeeCode: string; firstName: string; lastName: string } | null;
+  security?: { emailVerified: boolean; mfaEnabled: boolean; mfaRequired: boolean };
 }
 
 /** Directory entries leave out the fields marked optional; full records include them. */

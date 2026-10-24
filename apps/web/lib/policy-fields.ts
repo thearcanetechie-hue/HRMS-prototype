@@ -18,7 +18,7 @@ export type PolicyField = { path: string; label: string; help?: string } & (
 );
 
 export interface PolicySection {
-  key: 'attendance' | 'leave' | 'payroll';
+  key: 'attendance' | 'leave' | 'payroll' | 'security';
   title: string;
   permission: Permission;
   groups: { title: string; description?: string; fields: PolicyField[] }[];
@@ -409,6 +409,74 @@ export const POLICY_SECTIONS: PolicySection[] = [
               ['GROSS', 'Gross pay'],
               ['BASIC', 'Basic'],
             ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'security',
+    title: 'Sign-in security',
+    permission: 'tenant.manage',
+    groups: [
+      {
+        title: 'Two-step sign-in',
+        description: 'A code from an authenticator app after the password.',
+        fields: [
+          {
+            path: 'mfaForAdmins',
+            type: 'toggle',
+            label: 'Require it for admins',
+            help: 'Anyone who can manage the workspace, employees or payroll.',
+          },
+          { path: 'mfaForEveryone', type: 'toggle', label: 'Require it for everyone' },
+        ],
+      },
+      {
+        title: 'Wrong passwords',
+        fields: [
+          {
+            path: 'lockout.attempts',
+            type: 'number',
+            label: 'Lock a login after',
+            min: 3,
+            max: 20,
+            unit: 'wrong passwords in a row',
+          },
+          {
+            path: 'lockout.minutes',
+            type: 'number',
+            label: 'For',
+            min: 1,
+            max: 1440,
+            unit: 'minutes',
+          },
+        ],
+      },
+      {
+        title: 'Sessions',
+        fields: [
+          {
+            path: 'rememberDays',
+            type: 'number',
+            label: '“Keep me signed in” lasts',
+            min: 1,
+            max: 90,
+            unit: 'days',
+          },
+          {
+            path: 'sessionHours',
+            type: 'number',
+            label: 'Otherwise a session lasts',
+            min: 1,
+            max: 72,
+            unit: 'hours',
+          },
+          {
+            path: 'allowSso',
+            type: 'toggle',
+            label: 'Allow Google and Microsoft sign-in',
+            help: 'When the server has them set up.',
           },
         ],
       },
