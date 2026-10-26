@@ -14,6 +14,7 @@ import {
   attendancePolicySchema,
   leavePolicySchema,
   payrollPolicySchema,
+  securityPolicySchema,
   type Permission,
   type PolicyKey,
 } from '@hrms/shared';
@@ -22,8 +23,6 @@ import { z } from 'zod';
 import { AuditModule } from '../audit/audit.module';
 import { AuditService } from '../audit/audit.service';
 import { currentContext, requireTenantId } from '../common/request-context';
-import { EmployeesModule } from '../employees/employees.module';
-import { EmployeeAccess } from '../employees/employee-access.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Each policy, its rules and who may change it. Payroll registers its own entry. */
@@ -32,13 +31,16 @@ export const POLICY_DEFS: Partial<Record<PolicyKey, { schema: z.ZodTypeAny; mana
     attendance: { schema: attendancePolicySchema, manage: 'attendance.manage' },
     leave: { schema: leavePolicySchema, manage: 'attendance.manage' },
     payroll: { schema: payrollPolicySchema, manage: 'payroll.manage' },
+    security: { schema: securityPolicySchema, manage: 'tenant.manage' },
   };
 
 export type PolicyOf<K extends PolicyKey> = K extends 'attendance'
   ? z.infer<typeof attendancePolicySchema>
   : K extends 'leave'
     ? z.infer<typeof leavePolicySchema>
-    : z.infer<typeof payrollPolicySchema>;
+    : K extends 'payroll'
+      ? z.infer<typeof payrollPolicySchema>
+      : z.infer<typeof securityPolicySchema>;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -59,7 +61,6 @@ function merge(base: unknown, patch: unknown): unknown {
 export class PolicyService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly access: EmployeeAccess,
     private readonly audit: AuditService,
   ) {}
 
@@ -85,7 +86,9 @@ export class PolicyService {
 
   async update(key: PolicyKey, patch: unknown) {
     const d = this.def(key);
-    if (!this.access.can(d.manage)) throw new ForbiddenException('You can’t change this policy');
+    // Permissions come from the request context the auth guard filled in.
+    if (!currentContext().permissions?.has(d.manage))
+      throw new ForbiddenException('You can’t change this policy');
     const tenantId = requireTenantId();
     const row = await this.prisma.db.policy.findUnique({
       where: { tenantId_key: { tenantId, key } },
@@ -129,7 +132,7 @@ class PoliciesController {
 }
 
 @Module({
-  imports: [AuditModule, EmployeesModule],
+  imports: [AuditModule],
   controllers: [PoliciesController],
   providers: [PolicyService],
   exports: [PolicyService],

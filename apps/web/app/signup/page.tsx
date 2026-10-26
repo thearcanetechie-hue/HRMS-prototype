@@ -1,10 +1,11 @@
 'use client';
 
-import { signupSchema } from '@hrms/shared';
+import { passwordProblem, signupSchema } from '@hrms/shared';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { OnboardingLayout } from '@/components/onboarding-layout';
+import { NewPasswordField } from '@/components/password-field';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 import { Checkbox, Field, FormError, IconInput, Input, Label } from '@/components/ui/input';
@@ -16,27 +17,10 @@ import {
   setOnboardingPassword,
   type OnboardingAbout,
 } from '@/lib/onboarding';
-import { cn } from '@/lib/utils';
 
 const ROLES = ['HR / People team', 'Founder / CEO', 'Finance', 'IT admin'];
 
 const aboutSchema = signupSchema.pick({ fullName: true, email: true, password: true });
-
-/** 0 to 4: length, mixed case, digits, symbols. */
-function strength(p: string) {
-  if (!p) return 0;
-  let s = p.length >= 12 ? 2 : p.length >= 8 ? 1 : 0;
-  if (/[a-z]/.test(p) && /[A-Z]/.test(p)) s++;
-  if (/\d/.test(p) && /[^a-zA-Z0-9]/.test(p)) s++;
-  return Math.min(4, Math.max(1, s));
-}
-const STRENGTH = [
-  ['', ''],
-  ['Weak password', 'text-danger'],
-  ['Fair password', 'text-warning'],
-  ['Good password', 'text-success'],
-  ['Strong password', 'text-success'],
-] as const;
 
 export default function SignupAboutPage() {
   const router = useRouter();
@@ -63,15 +47,14 @@ export default function SignupAboutPage() {
     e.preventDefault();
     setFormError('');
     const { errors } = validate(aboutSchema, { ...about, password });
-    setErrors(errors ?? {});
-    if (errors) return;
+    const problem = passwordProblem(password, { email: about.email, name: about.fullName });
+    setErrors({ ...(errors ?? {}), ...(problem ? { password: problem } : {}) });
+    if (errors || problem) return;
     if (!agreed) return setFormError('Please agree to the Terms and the Privacy policy.');
     setOnboardingPassword(password);
     saveOnboarding({ step: 2, about });
     router.push(ONBOARDING_ROUTES[2]);
   }
-
-  const s = strength(password);
 
   return (
     <OnboardingLayout
@@ -127,36 +110,15 @@ export default function SignupAboutPage() {
               placeholder="98450 12345"
             />
           </Field>
-          <Field id="password" label="Create a password" error={errors.password}>
-            <Input
-              id="password"
-              type="password"
+          <div className="sm:col-span-2">
+            <NewPasswordField
+              label="Create a password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              required
+              onChange={setPassword}
+              context={{ email: about.email, name: about.fullName }}
+              error={errors.password}
             />
-            <div className="mt-1 flex items-center gap-3" aria-live="polite">
-              <div className="flex grow gap-1" aria-hidden="true">
-                {[1, 2, 3, 4].map((i) => (
-                  <span
-                    key={i}
-                    className={cn(
-                      'h-1.5 flex-1 rounded-full',
-                      i <= s
-                        ? s >= 3
-                          ? 'bg-success'
-                          : s === 2
-                            ? 'bg-warning'
-                            : 'bg-danger'
-                        : 'bg-surface-2',
-                    )}
-                  />
-                ))}
-              </div>
-              <span className={cn('text-xs font-bold', STRENGTH[s]?.[1])}>{STRENGTH[s]?.[0]}</span>
-            </div>
-          </Field>
+          </div>
         </div>
 
         <div className="grid gap-2.5">
@@ -175,8 +137,15 @@ export default function SignupAboutPage() {
           onChange={(e) => setAgreed(e.target.checked)}
           label={
             <>
-              I agree to the <a href="#">Terms</a> and the <a href="#">Privacy policy</a> (DPDP Act
-              2023)
+              I agree to the{' '}
+              <a href="/terms" target="_blank">
+                Terms
+              </a>{' '}
+              and the{' '}
+              <a href="/privacy" target="_blank">
+                Privacy notice
+              </a>
+              , and to my details being processed to run this workspace (DPDP Act 2023)
             </>
           }
         />

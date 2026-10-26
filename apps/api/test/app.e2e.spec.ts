@@ -50,6 +50,7 @@ describe('HRMS API', () => {
         fullName: 'Someone Else',
         email: 'x@y.test',
         password,
+        acceptTerms: true,
       })
       .expect(409);
     const weak = await api()

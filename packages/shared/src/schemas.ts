@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PASSWORD_MAX, PASSWORD_MIN } from './password';
 import { ALL_PERMISSIONS } from './permissions';
 
 const slug = z
@@ -9,12 +10,12 @@ const slug = z
   .max(40)
   .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, 'Use lowercase letters, numbers and hyphens');
 
+// Length is checked here; common passwords and personal details are checked with the
+// person's context in the API (see password.ts).
 const password = z
   .string()
-  .min(10, 'Use at least 10 characters')
-  .max(128)
-  .regex(/[a-zA-Z]/, 'Include a letter')
-  .regex(/[0-9]/, 'Include a number');
+  .min(PASSWORD_MIN, `Use at least ${PASSWORD_MIN} characters`)
+  .max(PASSWORD_MAX);
 
 const email = z.string().trim().toLowerCase().email().max(254);
 
@@ -24,6 +25,12 @@ export const signupSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   email,
   password,
+  /** Terms of service and privacy notice (DPDP Act 2023 consent). */
+  acceptTerms: z.literal(true, {
+    errorMap: () => ({ message: 'Please accept the terms and privacy notice' }),
+  }),
+  /** Honeypot: people never see this field, so anything in it is a bot. */
+  website: z.string().max(0).optional(),
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 
@@ -31,6 +38,8 @@ export const loginSchema = z.object({
   workspace: slug,
   email,
   password: z.string().min(1).max(128),
+  /** Keep me signed in: off gives a short session that ends with the browser. */
+  remember: z.boolean().default(true),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
@@ -46,7 +55,13 @@ export const EMPLOYEE_STATUSES = ['ONBOARDING', 'ACTIVE', 'ON_NOTICE', 'EXITED']
 const optionalId = z.string().uuid().nullish();
 
 export const createEmployeeSchema = z.object({
-  employeeCode: z.string().trim().min(1).max(32),
+  /** Left out (or blank) on create, the server assigns the next free EMP-#### code. */
+  employeeCode: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .transform((v) => v || undefined),
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().max(80).default(''),
   workEmail: email,
@@ -923,3 +938,26 @@ export const monthCloseSchema = z.object({
   unmarkedAs: z.enum(['A', 'P']).default('A'),
 });
 export type MonthCloseInput = z.infer<typeof monthCloseSchema>;
+
+// ---------- Account security ----------
+
+export const mfaVerifySchema = z.object({
+  challenge: z.string().min(20).max(200),
+  /** Six digits from the authenticator app, or a recovery code. */
+  code: z.string().trim().min(6).max(20),
+});
+export const emailOnlySchema = z.object({ email });
+export const forgotPasswordSchema = z.object({ workspace: slug, email });
+export const resetPasswordSchema = z.object({ token: z.string().min(20).max(200), password });
+export const verifyEmailSchema = z.object({ token: z.string().min(20).max(200) });
+export const changePasswordSchema = z.object({ current: z.string().min(1).max(128), password });
+export const mfaCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code'),
+});
+export const mfaDisableSchema = z.object({
+  password: z.string().min(1).max(128),
+  code: z.string().trim().min(6).max(20),
+});

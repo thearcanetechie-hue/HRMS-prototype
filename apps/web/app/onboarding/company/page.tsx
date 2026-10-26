@@ -128,6 +128,9 @@ export default function OnboardingCompanyPage() {
           fullName: about.fullName,
           email: about.email,
           password,
+          // Agreed on the first step, which won't continue without it.
+          acceptTerms: true,
+          website: (document.getElementById('website') as HTMLInputElement | null)?.value ?? '',
         }),
       });
       setAccessToken(accessToken);
@@ -153,6 +156,16 @@ export default function OnboardingCompanyPage() {
       }}
     >
       <form onSubmit={onSubmit} noValidate className="grid gap-6">
+        {/* Honeypot: hidden from people, so anything typed here comes from a bot. */}
+        <input
+          id="website"
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          className="absolute -left-[9999px] size-px opacity-0"
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="companyName" label="Company name" error={errors.companyName}>
             <IconInput

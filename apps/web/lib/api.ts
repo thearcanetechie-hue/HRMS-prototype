@@ -52,9 +52,12 @@ async function send(path: string, init: RequestInit, retry: boolean): Promise<Re
       errors?: Record<string, string[]>;
     };
     const message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+    // No JSON body on a 5xx means the API itself didn't answer (the proxy failed).
+    const fallback =
+      res.status >= 500 ? 'The server isn’t responding. Try again in a moment.' : res.statusText;
     throw new ApiError(
       res.status,
-      res.status === 413 ? 'Files can be up to 20 MB' : (message ?? res.statusText),
+      res.status === 413 ? 'Files can be up to 20 MB' : (message ?? fallback),
       body.errors,
     );
   }
@@ -75,6 +78,7 @@ export interface Me {
   user: { id: string; email: string; fullName: string; permissions: string[] };
   tenant: { id: string; name: string; slug: string; status: string };
   employee: { id: string; employeeCode: string; firstName: string; lastName: string } | null;
+  security?: { emailVerified: boolean; mfaEnabled: boolean; mfaRequired: boolean };
 }
 
 /** Directory entries leave out the fields marked optional; full records include them. */

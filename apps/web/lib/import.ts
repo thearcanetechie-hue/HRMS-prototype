@@ -175,7 +175,8 @@ export async function importRows(
       const e = await api<Employee>('/employees', {
         method: 'POST',
         body: JSON.stringify({
-          employeeCode: r.employeeCode || `EMP-${String(n).padStart(3, '0')}`,
+          // Blank lets the server assign the next free code.
+          employeeCode: r.employeeCode || undefined,
           firstName,
           lastName: rest.join(' '),
           workEmail: r.workEmail,

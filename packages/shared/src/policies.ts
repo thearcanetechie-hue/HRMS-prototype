@@ -243,5 +243,27 @@ export const settlementSchema = z.object({
 });
 export type SettlementInput = z.infer<typeof settlementSchema>;
 
-export const POLICY_KEYS = ['attendance', 'leave', 'payroll'] as const;
+/** Sign-in security for the workspace. */
+export const securityPolicySchema = z.object({
+  /** Wrong passwords in a row before the login is locked, and for how long. */
+  lockout: z
+    .object({
+      attempts: z.number().int().min(3).max(20).default(5),
+      minutes: z.number().int().min(1).max(1440).default(15),
+    })
+    .default({}),
+  /** Require two-step sign-in for people who can manage the workspace, HR or payroll. */
+  mfaForAdmins: z.boolean().default(false),
+  /** Require it for everyone. */
+  mfaForEveryone: z.boolean().default(false),
+  /** How long "Keep me signed in" lasts. */
+  rememberDays: z.number().int().min(1).max(90).default(30),
+  /** How long a session lasts without "Keep me signed in". */
+  sessionHours: z.number().int().min(1).max(72).default(12),
+  /** Allow Google and Microsoft sign-in (when the server has them set up). */
+  allowSso: z.boolean().default(true),
+});
+export type SecurityPolicy = z.infer<typeof securityPolicySchema>;
+
+export const POLICY_KEYS = ['attendance', 'leave', 'payroll', 'security'] as const;
 export type PolicyKey = (typeof POLICY_KEYS)[number];
