@@ -55,7 +55,13 @@ export const EMPLOYEE_STATUSES = ['ONBOARDING', 'ACTIVE', 'ON_NOTICE', 'EXITED']
 const optionalId = z.string().uuid().nullish();
 
 export const createEmployeeSchema = z.object({
-  employeeCode: z.string().trim().min(1).max(32),
+  /** Left out (or blank) on create, the server assigns the next free EMP-#### code. */
+  employeeCode: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .transform((v) => v || undefined),
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().max(80).default(''),
   workEmail: email,
