@@ -63,77 +63,77 @@ model Tenant {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  users               User[]
-  roles               Role[]
-  employees           Employee[]
-  departments         Department[]
-  designations        Designation[]
-  locations           Location[]
-  legalEntities       LegalEntity[]
-  auditLogs           AuditLog[]
-  documents           Document[]
-  folders             DocumentFolder[]
-  checklistTemplates  ChecklistTemplate[]
-  checklists          EmployeeChecklist[]
-  leaveTypes          LeaveType[]
-  leaveRequests       LeaveRequest[]
-  attendance          AttendanceRecord[]
-  assets              Asset[]
-  assetEvents         AssetEvent[]
-  overtime            OvertimeRequest[]
-  expenses            ExpenseClaim[]
-  claimCategories     ClaimCategory[]
-  salaries            SalaryStructure[]
-  payrollRuns         PayrollRun[]
-  payslips            Payslip[]
-  filings             ComplianceFiling[]
-  goals               Goal[]
-  reviewCycles        ReviewCycle[]
-  reviews             Review[]
-  kudos               Kudos[]
-  courses             Course[]
-  courseSessions      CourseSession[]
-  enrollments         Enrollment[]
-  posts               Post[]
-  postReactions       PostReaction[]
-  postComments        PostComment[]
-  eventRsvps          EventRsvp[]
-  polls               Poll[]
-  pollOptions         PollOption[]
-  pollVotes           PollVote[]
-  pulseSurveys        PulseSurvey[]
-  pulseParticipants   PulseParticipant[]
-  pulseResponses      PulseResponse[]
-  conversations       Conversation[]
+  users         User[]
+  roles         Role[]
+  employees     Employee[]
+  departments   Department[]
+  designations  Designation[]
+  locations     Location[]
+  legalEntities LegalEntity[]
+  auditLogs     AuditLog[]
+  documents     Document[]
+  folders       DocumentFolder[]
+  checklistTemplates ChecklistTemplate[]
+  checklists    EmployeeChecklist[]
+  leaveTypes    LeaveType[]
+  leaveRequests LeaveRequest[]
+  attendance    AttendanceRecord[]
+  assets        Asset[]
+  assetEvents   AssetEvent[]
+  overtime      OvertimeRequest[]
+  expenses      ExpenseClaim[]
+  claimCategories ClaimCategory[]
+  salaries      SalaryStructure[]
+  payrollRuns   PayrollRun[]
+  payslips      Payslip[]
+  filings       ComplianceFiling[]
+  goals         Goal[]
+  reviewCycles  ReviewCycle[]
+  reviews       Review[]
+  kudos         Kudos[]
+  courses       Course[]
+  courseSessions CourseSession[]
+  enrollments   Enrollment[]
+  posts         Post[]
+  postReactions PostReaction[]
+  postComments  PostComment[]
+  eventRsvps    EventRsvp[]
+  polls         Poll[]
+  pollOptions   PollOption[]
+  pollVotes     PollVote[]
+  pulseSurveys  PulseSurvey[]
+  pulseParticipants PulseParticipant[]
+  pulseResponses PulseResponse[]
+  conversations Conversation[]
   conversationMembers ConversationMember[]
-  messages            Message[]
-  shifts              Shift[]
-  holidays            Holiday[]
-  regularisations     AttendanceRegularisation[]
-  biometricDevices    BiometricDevice[]
-  punches             Punch[]
-  leaveLedger         LeaveLedger[]
-  leaveYearCloses     LeaveYearClose[]
-  attendanceMonths    AttendanceMonth[]
-  policies            Policy[]
-  taxDeclarations     TaxDeclaration[]
-  payItems            PayItem[]
-  settlements         Settlement[]
-  savedReports        SavedReport[]
+  messages      Message[]
+  shifts        Shift[]
+  holidays      Holiday[]
+  regularisations AttendanceRegularisation[]
+  biometricDevices BiometricDevice[]
+  punches       Punch[]
+  leaveLedger   LeaveLedger[]
+  leaveYearCloses LeaveYearClose[]
+  attendanceMonths AttendanceMonth[]
+  policies      Policy[]
+  taxDeclarations TaxDeclaration[]
+  payItems      PayItem[]
+  settlements   Settlement[]
+  savedReports  SavedReport[]
 }
 
 model User {
-  id                String     @id @default(uuid()) @db.Uuid
-  tenantId          String     @db.Uuid
-  email             String
-  passwordHash      String?
-  fullName          String
-  status            UserStatus @default(ACTIVE)
-  lastLoginAt       DateTime?
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @db.Uuid
+  email        String
+  passwordHash String?
+  fullName     String
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
   emailVerifiedAt   DateTime?
   passwordChangedAt DateTime?
   /// Wrong passwords in a row; reset on success. Too many locks the login for a while.
-  failedLogins      Int        @default(0)
+  failedLogins      Int       @default(0)
   lockedUntil       DateTime?
   /// Authenticator app (TOTP) secret, encrypted; set when two-step sign-in is on.
   mfaSecretEnc      String?
@@ -142,18 +142,18 @@ model User {
   mfaLastStep       Int?
   termsAcceptedAt   DateTime?
   termsVersion      String?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  roles         UserRole[]
-  sessions      Session[]
-  employee      Employee?
-  invitations   Invitation[]
-  authTokens    AuthToken[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roles       UserRole[]
+  sessions    Session[]
+  employee    Employee?
+  invitations Invitation[]
+  authTokens  AuthToken[]
   recoveryCodes RecoveryCode[]
-  identities    ExternalIdentity[]
-  savedReports  SavedReport[]
+  identities  ExternalIdentity[]
+  savedReports SavedReport[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -191,20 +191,20 @@ model UserRole {
 
 /// Refresh-token sessions. Only a SHA-256 hash of the token is stored; tokens rotate on every refresh.
 model Session {
-  id         String    @id @default(uuid()) @db.Uuid
-  tenantId   String    @db.Uuid
-  userId     String    @db.Uuid
-  tokenHash  String    @unique
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  userAgent  String?
-  ip         String?
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
   /// "Keep me signed in": false makes a browser-session cookie with a short lifetime.
-  persistent Boolean   @default(true)
+  persistent Boolean  @default(true)
   /// The first session of a chain of refreshes, so a device keeps one identity.
-  familyId   String?   @db.Uuid
-  lastUsedAt DateTime  @default(now())
-  createdAt  DateTime  @default(now())
+  familyId  String?   @db.Uuid
+  lastUsedAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -239,7 +239,7 @@ model Location {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employees Employee[]
   holidays  Holiday[]
   devices   BiometricDevice[]
@@ -306,46 +306,46 @@ model Employee {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  tenant              Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user                User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
-  department          Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  designation         Designation?               @relation(fields: [designationId], references: [id], onDelete: SetNull)
-  location            Location?                  @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  shift               Shift?                     @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  legalEntity         LegalEntity?               @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
-  manager             Employee?                  @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
-  reports             Employee[]                 @relation("Reports")
-  profile             EmployeeProfile?
-  documents           Document[]
-  checklists          EmployeeChecklist[]
-  leaveRequests       LeaveRequest[]
-  attendance          AttendanceRecord[]
-  assets              Asset[]
-  overtime            OvertimeRequest[]
-  expenses            ExpenseClaim[]
-  salaries            SalaryStructure[]
-  payslips            Payslip[]
-  goals               Goal[]
-  reviews             Review[]                   @relation("Reviewee")
-  reviewsGiven        Review[]                   @relation("Reviewer")
-  kudosSent           Kudos[]                    @relation("KudosFrom")
-  kudosReceived       Kudos[]                    @relation("KudosTo")
-  coursesLed          Course[]                   @relation("CourseLead")
-  enrollments         Enrollment[]
-  posts               Post[]
-  postReactions       PostReaction[]
-  postComments        PostComment[]
-  eventRsvps          EventRsvp[]
-  pollVotes           PollVote[]
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department  Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation Designation?     @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  location    Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shift       Shift?           @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  legalEntity LegalEntity?     @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
+  manager     Employee?        @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
+  reports     Employee[]       @relation("Reports")
+  profile     EmployeeProfile?
+  documents   Document[]
+  checklists  EmployeeChecklist[]
+  leaveRequests LeaveRequest[]
+  attendance  AttendanceRecord[]
+  assets      Asset[]
+  overtime    OvertimeRequest[]
+  expenses    ExpenseClaim[]
+  salaries    SalaryStructure[]
+  payslips    Payslip[]
+  goals       Goal[]
+  reviews     Review[]          @relation("Reviewee")
+  reviewsGiven Review[]         @relation("Reviewer")
+  kudosSent   Kudos[]           @relation("KudosFrom")
+  kudosReceived Kudos[]         @relation("KudosTo")
+  coursesLed    Course[]          @relation("CourseLead")
+  enrollments   Enrollment[]
+  posts         Post[]
+  postReactions PostReaction[]
+  postComments  PostComment[]
+  eventRsvps    EventRsvp[]
+  pollVotes     PollVote[]
   pulseParticipations PulseParticipant[]
-  regularisations     AttendanceRegularisation[]
-  punches             Punch[]
-  leaveLedger         LeaveLedger[]
-  taxDeclarations     TaxDeclaration[]
-  payItems            PayItem[]
-  settlement          Settlement[]
-  conversations       ConversationMember[]
-  messages            Message[]
+  regularisations AttendanceRegularisation[]
+  punches       Punch[]
+  leaveLedger   LeaveLedger[]
+  taxDeclarations TaxDeclaration[]
+  payItems      PayItem[]
+  settlement    Settlement[]
+  conversations ConversationMember[]
+  messages      Message[]
 
   @@unique([tenantId, employeeCode])
   @@unique([tenantId, biometricId])
@@ -630,22 +630,22 @@ model LeaveType {
 }
 
 model LeaveRequest {
-  id            String      @id @default(uuid()) @db.Uuid
-  tenantId      String      @db.Uuid
-  employeeId    String      @db.Uuid
-  leaveTypeId   String      @db.Uuid
-  startDate     DateTime    @db.Date
-  endDate       DateTime    @db.Date
-  halfDay       Boolean     @default(false)
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @db.Uuid
+  employeeId   String      @db.Uuid
+  leaveTypeId  String      @db.Uuid
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  halfDay      Boolean     @default(false)
   /// Working days (Monday to Friday) the request covers; 0.5 for a half day.
-  days          Decimal     @db.Decimal(5, 1)
-  reason        String?
-  status        LeaveStatus @default(PENDING)
-  requestedById String?     @db.Uuid
-  decidedById   String?     @db.Uuid
-  decidedAt     DateTime?
-  decisionNote  String?
-  createdAt     DateTime    @default(now())
+  days         Decimal     @db.Decimal(5, 1)
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  requestedById String?    @db.Uuid
+  decidedById  String?     @db.Uuid
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime    @default(now())
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
@@ -657,19 +657,19 @@ model LeaveRequest {
 
 /// One person's attendance for one day: a check-in from the web or a biometric device, or HR's mark.
 model AttendanceRecord {
-  id         String           @id @default(uuid()) @db.Uuid
-  tenantId   String           @db.Uuid
-  employeeId String           @db.Uuid
-  date       DateTime         @db.Date
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  employeeId  String           @db.Uuid
+  date        DateTime         @db.Date
   /// P (present), A (absent) or HD (half day).
-  status     String
-  checkIn    DateTime?
-  checkOut   DateTime?
-  source     AttendanceSource @default(WEB)
-  note       String?
-  markedById String?          @db.Uuid
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  status      String
+  checkIn     DateTime?
+  checkOut    DateTime?
+  source      AttendanceSource @default(WEB)
+  note        String?
+  markedById  String?          @db.Uuid
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
@@ -866,50 +866,50 @@ model PayrollRun {
 }
 
 model Payslip {
-  id             String    @id @default(uuid()) @db.Uuid
-  tenantId       String    @db.Uuid
-  runId          String    @db.Uuid
-  employeeId     String    @db.Uuid
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  runId        String   @db.Uuid
+  employeeId   String   @db.Uuid
   /// [{ key, label, amount, kind }]
-  lines          Json
-  gross          Int
-  deductions     Int
-  net            Int
-  pf             Int       @default(0)
-  esi            Int       @default(0)
-  pt             Int       @default(0)
-  tds            Int       @default(0)
-  employerPf     Int       @default(0)
-  employerEsi    Int       @default(0)
-  reimbursements Int       @default(0)
-  payableDays    Decimal   @db.Decimal(5, 1)
-  daysInMonth    Int
-  lopDays        Decimal   @default(0) @db.Decimal(5, 1)
-  overtimeHours  Decimal   @default(0) @db.Decimal(5, 1)
+  lines        Json
+  gross        Int
+  deductions   Int
+  net          Int
+  pf           Int      @default(0)
+  esi          Int      @default(0)
+  pt           Int      @default(0)
+  tds          Int      @default(0)
+  employerPf   Int      @default(0)
+  employerEsi  Int      @default(0)
+  reimbursements Int    @default(0)
+  payableDays  Decimal  @db.Decimal(5, 1)
+  daysInMonth  Int
+  lopDays      Decimal  @default(0) @db.Decimal(5, 1)
+  overtimeHours Decimal @default(0) @db.Decimal(5, 1)
   /// Statutory detail for returns and challans.
-  taxableIncome  Int       @default(0)
-  annualTax      Int       @default(0)
-  regime         TaxRegime @default(NEW)
-  eps            Int       @default(0)
-  edli           Int       @default(0)
-  pfAdmin        Int       @default(0)
-  pfWages        Int       @default(0)
-  epsWages       Int       @default(0)
-  esiWages       Int       @default(0)
-  lwf            Int       @default(0)
-  employerLwf    Int       @default(0)
-  bonus          Int       @default(0)
+  taxableIncome Int     @default(0)
+  annualTax     Int     @default(0)
+  regime        TaxRegime @default(NEW)
+  eps           Int     @default(0)
+  edli          Int     @default(0)
+  pfAdmin       Int     @default(0)
+  pfWages       Int     @default(0)
+  epsWages      Int     @default(0)
+  esiWages      Int     @default(0)
+  lwf           Int     @default(0)
+  employerLwf   Int     @default(0)
+  bonus         Int     @default(0)
   /// The salary structure used, and arrears this payslip settled for earlier months.
-  salaryId       String?   @db.Uuid
-  arrearsPaid    Json      @default("[]")
-  payItemIds     String[]  @db.Uuid
-  encashmentIds  String[]  @db.Uuid
+  salaryId      String? @db.Uuid
+  arrearsPaid   Json    @default("[]")
+  payItemIds    String[] @db.Uuid
+  encashmentIds String[] @db.Uuid
   /// [{ tag, reason, tone }] things HR should check before locking.
-  flags          Json      @default("[]")
-  reviewed       Boolean   @default(false)
+  flags        Json     @default("[]")
+  reviewed     Boolean  @default(false)
   /// Claims and overtime this payslip pays, marked paid when the run is paid.
-  claimIds       String[]  @db.Uuid
-  overtimeIds    String[]  @db.Uuid
+  claimIds     String[] @db.Uuid
+  overtimeIds  String[] @db.Uuid
 
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
@@ -976,12 +976,12 @@ model Goal {
 }
 
 model ReviewCycle {
-  id        String    @id @default(uuid()) @db.Uuid
-  tenantId  String    @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
   name      String
-  closesOn  DateTime  @db.Date
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
+  closesOn  DateTime @db.Date
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
   closedAt  DateTime?
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1363,14 +1363,14 @@ model Shift {
 
 /// A public holiday. With a location it applies only to people at that location.
 model Holiday {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String   @db.Uuid
-  date       DateTime @db.Date
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  date       DateTime  @db.Date
   name       String
   /// Optional (restricted) holidays are listed but not days off.
-  optional   Boolean  @default(false)
-  locationId String?  @db.Uuid
-  createdAt  DateTime @default(now())
+  optional   Boolean   @default(false)
+  locationId String?   @db.Uuid
+  createdAt  DateTime  @default(now())
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   location Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
@@ -1495,13 +1495,13 @@ model LeaveLedger {
 
 /// A leave year closed by HR: carry forward written, the rest lapsed or encashed.
 model LeaveYearClose {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String   @db.Uuid
-  year       Int
-  encashed   Boolean  @default(false)
-  summary    Json     @default("{}")
-  closedById String?  @db.Uuid
-  createdAt  DateTime @default(now())
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  year        Int
+  encashed    Boolean  @default(false)
+  summary     Json     @default("{}")
+  closedById  String?  @db.Uuid
+  createdAt   DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1657,16 +1657,16 @@ enum AuthTokenKind {
 /// Single-use tokens sent by email (verify, reset) or held during a two-step sign-in.
 /// Only a SHA-256 hash is stored.
 model AuthToken {
-  id         String        @id @default(uuid()) @db.Uuid
-  tenantId   String        @db.Uuid
-  userId     String        @db.Uuid
-  kind       AuthTokenKind
-  tokenHash  String        @unique
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @db.Uuid
+  userId    String        @db.Uuid
+  kind      AuthTokenKind
+  tokenHash String        @unique
   /// Two-step sign-in: whether to keep the session after the code is entered.
-  persistent Boolean       @default(true)
-  expiresAt  DateTime
-  usedAt     DateTime?
-  createdAt  DateTime      @default(now())
+  persistent Boolean      @default(true)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
