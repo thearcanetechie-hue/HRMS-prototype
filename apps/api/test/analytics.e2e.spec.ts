@@ -64,10 +64,11 @@ describe('Analytics', () => {
       .expect(200);
     const kpi = (label: string) =>
       res.body.kpis.find((k: { label: string }) => k.label === label).value;
-    // The owner from sign-up plus A1 and A2; A3 has left.
+    // The owner from sign-up plus A1 and A2; A3 has left. The owner and A2 joined this year.
     expect(kpi('Headcount today')).toBe('3');
-    expect(kpi('Joiners')).toBe('1');
+    expect(kpi('Joiners')).toBe('2');
     expect(kpi('Exits')).toBe('1');
+    expect(kpi('Net change')).toBe('+1');
     expect(res.body.bars.values).toHaveLength(12);
 
     const attrition = await api()
