@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 /** Models that belong to a workspace. Tenant itself is not scoped. */
 export const TENANT_SCOPED_MODELS: ReadonlySet<Prisma.ModelName> = new Set<Prisma.ModelName>([
   'User',
+  'SavedReport',
   'Role',
   'UserRole',
   'Session',
