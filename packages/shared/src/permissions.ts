@@ -14,6 +14,19 @@ export const PERMISSIONS = {
   'employee.read': 'See full records of every employee',
   'employee.manage': 'Add and edit employee records and invite people to sign in',
   'employee.sensitive.read': 'See unmasked PAN, Aadhaar, UAN, ESIC and bank details',
+  'document.read': "See every employee's documents and HR-only folders",
+  'document.manage': 'Upload, verify and delete any document; manage folders',
+  'lifecycle.manage':
+    'Start onboarding and offboarding, edit checklist templates and tick off any task',
+  'attendance.manage':
+    'Mark attendance for anyone, decide any leave request and set up leave types',
+  'asset.manage': 'Keep the asset register: add, assign, take back, repair and retire assets',
+  'claims.manage': 'Decide any overtime or expense claim, mark claims paid and set claim limits',
+  'payroll.manage': "Set salaries, run payroll, see everyone's payslips and mark statutory filings",
+  'performance.manage': 'Run review cycles, see every goal and review, and calibrate ratings',
+  'learning.manage': "Create courses, enrol people and see everyone's progress",
+  'engagement.manage':
+    'Post announcements and events, pin or remove posts, and run polls and pulse surveys',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -42,6 +55,16 @@ export const SYSTEM_ROLES: Record<
       'employee.read',
       'employee.manage',
       'employee.sensitive.read',
+      'document.read',
+      'document.manage',
+      'lifecycle.manage',
+      'attendance.manage',
+      'asset.manage',
+      'claims.manage',
+      'payroll.manage',
+      'performance.manage',
+      'learning.manage',
+      'engagement.manage',
       'audit.read',
     ],
   },

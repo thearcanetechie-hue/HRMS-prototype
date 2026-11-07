@@ -72,3 +72,11 @@ Everyone sees their own record and profile in full. PAN, Aadhaar, UAN, ESIC and 
 account numbers are encrypted with AES-256-GCM under a key derived per workspace from
 `DATA_ENCRYPTION_KEY` (`apps/api/src/crypto/field-crypto.ts`); others see only the last four
 characters. Back that key up: without it those fields cannot be read.
+
+## Documents
+
+Uploaded files are encrypted with the workspace key (`DATA_ENCRYPTION_KEY`) and stored under
+`STORAGE_DIR` (default `apps/api/storage`; a `documents` volume in Docker). Back that folder up
+together with the database. Employees see and upload only their own files (HR reviews them);
+`document.read` and `document.manage` cover everyone's files and company folders, and every
+download of an employee's file is written to the audit log.

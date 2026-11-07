@@ -16,6 +16,8 @@ import { ANY_PERMISSIONS_KEY, AuthUser, IS_PUBLIC, PERMISSIONS_KEY } from './dec
 export interface AccessTokenPayload {
   sub: string;
   tid: string;
+  /** The sign-in (session family) this token belongs to; signing that device out ends it. */
+  sid?: string;
 }
 
 /**
@@ -46,11 +48,25 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException();
     }
 
-    const user = await this.prisma.user.findFirst({
-      where: { id: payload.sub, tenantId: payload.tid, status: 'ACTIVE' },
-      include: { tenant: { select: { status: true } }, roles: { include: { role: true } } },
-    });
-    if (!user || user.tenant.status === 'SUSPENDED') throw new UnauthorizedException();
+    const [user, live] = await Promise.all([
+      this.prisma.user.findFirst({
+        where: { id: payload.sub, tenantId: payload.tid, status: 'ACTIVE' },
+        include: { tenant: { select: { status: true } }, roles: { include: { role: true } } },
+      }),
+      // A signed-out device's access token stops working now, not when it expires.
+      payload.sid
+        ? this.prisma.session.findFirst({
+            where: {
+              userId: payload.sub,
+              familyId: payload.sid,
+              revokedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+            select: { id: true },
+          })
+        : Promise.resolve({ id: 'legacy' }),
+    ]);
+    if (!user || !live || user.tenant.status === 'SUSPENDED') throw new UnauthorizedException();
 
     const permissions = new Set<Permission>();
     for (const { role } of user.roles) {
@@ -69,6 +85,7 @@ export class AuthGuard implements CanActivate {
       email: user.email,
       fullName: user.fullName,
       permissions: [...permissions],
+      sessionId: payload.sid,
     };
 
     const required = this.reflector.getAllAndOverride<Permission[]>(PERMISSIONS_KEY, targets);

@@ -1,12 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { InviteButton } from '@/components/invite-button';
-import { ProfileForm } from '@/components/profile-form';
+import { EmployeeProfileView, ProfileSkeleton } from '@/components/employee-profile';
+import { Banner } from '@/components/ui/page';
 import { api, ApiError, Employee, Profile } from '@/lib/api';
-import { formatDate, initials, STATUS_PILL, titleCase } from '@/lib/format';
 import { useSession } from '@/lib/session';
 
 export default function EmployeePage() {
@@ -32,72 +30,16 @@ export default function EmployeePage() {
       );
   }, [id]);
 
-  if (error) return <div className="banner">{error}</div>;
-  if (!employee) return <div className="empty">Loading…</div>;
-
-  const facts: [string, string | undefined | null][] = [
-    ['Code', employee.employeeCode],
-    ['Work email', employee.workEmail],
-    ['Phone', employee.phone],
-    ['Department', employee.department?.name],
-    ['Designation', employee.designation?.name],
-    ['Location', employee.location?.name],
-    ['Manager', employee.manager && `${employee.manager.firstName} ${employee.manager.lastName}`],
-    ['Joined', employee.dateOfJoining && formatDate(employee.dateOfJoining)],
-    ['Employment', employee.employmentType && titleCase(employee.employmentType)],
-  ];
+  if (error) return <Banner>{error}</Banner>;
+  if (!employee) return <ProfileSkeleton />;
 
   return (
-    <>
-      <p style={{ margin: '0 0 10px' }}>
-        <Link href="/employees" className="muted">
-          ← People
-        </Link>
-      </p>
-      <div className="page-h">
-        <div className="who" style={{ gap: 14 }}>
-          <div className="avatar">{initials(employee.firstName, employee.lastName)}</div>
-          <div>
-            <h1>
-              {employee.firstName} {employee.lastName}
-            </h1>
-            <p>
-              {employee.designation?.name ?? 'No designation'}
-              {employee.department ? ` · ${employee.department.name}` : ''}
-            </p>
-          </div>
-        </div>
-        <div className="actions">
-          {employee.status && (
-            <span className={`pill ${STATUS_PILL[employee.status]}`}>
-              {titleCase(employee.status)}
-            </span>
-          )}
-          {can('employee.manage') && <InviteButton employee={employee} />}
-        </div>
-      </div>
-      <div className="card" style={{ marginBottom: 18 }}>
-        <div className="grid g3" style={{ gap: 14 }}>
-          {facts
-            .filter(([, v]) => v !== undefined)
-            .map(([k, v]) => (
-              <div key={k}>
-                <div className="muted" style={{ fontSize: 12, fontWeight: 700 }}>
-                  {k}
-                </div>
-                <div>{v || '–'}</div>
-              </div>
-            ))}
-        </div>
-      </div>
-      {profile && (
-        <ProfileForm
-          employeeId={id}
-          profile={profile}
-          editable={isSelf || can('employee.manage')}
-          onSaved={setProfile}
-        />
-      )}
-    </>
+    <EmployeeProfileView
+      employee={employee}
+      profile={profile}
+      editable={isSelf || can('employee.manage')}
+      canInvite={can('employee.manage') && employee.user?.status !== 'ACTIVE'}
+      onProfileSaved={setProfile}
+    />
   );
 }

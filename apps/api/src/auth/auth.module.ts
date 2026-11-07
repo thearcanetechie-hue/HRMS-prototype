@@ -1,12 +1,18 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { AuditModule } from '../audit/audit.module';
 import type { Env } from '../config';
-import { AuthController } from './auth.controller';
+import { PoliciesModule } from '../policies/policies.module';
+import { AuthController, DevMailController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { MailService } from './mail.service';
+import { OAuthService } from './oauth.service';
 
 @Module({
   imports: [
+    AuditModule,
+    PoliciesModule,
     JwtModule.registerAsync({
       global: true,
       inject: [ConfigService],
@@ -20,8 +26,8 @@ import { AuthService } from './auth.service';
       }),
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService],
-  exports: [AuthService],
+  controllers: [AuthController, DevMailController],
+  providers: [AuthService, MailService, OAuthService],
+  exports: [AuthService, MailService],
 })
 export class AuthModule {}

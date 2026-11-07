@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PASSWORD_MAX, PASSWORD_MIN } from './password';
 import { ALL_PERMISSIONS } from './permissions';
 
 const slug = z
@@ -9,12 +10,12 @@ const slug = z
   .max(40)
   .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, 'Use lowercase letters, numbers and hyphens');
 
+// Length is checked here; common passwords and personal details are checked with the
+// person's context in the API (see password.ts).
 const password = z
   .string()
-  .min(10, 'Use at least 10 characters')
-  .max(128)
-  .regex(/[a-zA-Z]/, 'Include a letter')
-  .regex(/[0-9]/, 'Include a number');
+  .min(PASSWORD_MIN, `Use at least ${PASSWORD_MIN} characters`)
+  .max(PASSWORD_MAX);
 
 const email = z.string().trim().toLowerCase().email().max(254);
 
@@ -24,6 +25,12 @@ export const signupSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   email,
   password,
+  /** Terms of service and privacy notice (DPDP Act 2023 consent). */
+  acceptTerms: z.literal(true, {
+    errorMap: () => ({ message: 'Please accept the terms and privacy notice' }),
+  }),
+  /** Honeypot: people never see this field, so anything in it is a bot. */
+  website: z.string().max(0).optional(),
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 
@@ -31,6 +38,8 @@ export const loginSchema = z.object({
   workspace: slug,
   email,
   password: z.string().min(1).max(128),
+  /** Keep me signed in: off gives a short session that ends with the browser. */
+  remember: z.boolean().default(true),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
@@ -46,7 +55,13 @@ export const EMPLOYEE_STATUSES = ['ONBOARDING', 'ACTIVE', 'ON_NOTICE', 'EXITED']
 const optionalId = z.string().uuid().nullish();
 
 export const createEmployeeSchema = z.object({
-  employeeCode: z.string().trim().min(1).max(32),
+  /** Left out (or blank) on create, the server assigns the next free EMP-#### code. */
+  employeeCode: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .transform((v) => v || undefined),
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().max(80).default(''),
   workEmail: email,
@@ -287,3 +302,662 @@ export const SENSITIVE_PROFILE_FIELDS = [
   'bankAccountNumber',
 ] as const;
 export type SensitiveProfileField = (typeof SENSITIVE_PROFILE_FIELDS)[number];
+
+// ---------- Documents ----------
+
+export const DOCUMENT_STATUSES = [
+  'PROCESSING',
+  'NEEDS_REVIEW',
+  'VERIFIED',
+  'SIGNED',
+  'ISSUED',
+  'REJECTED',
+] as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+
+/** Kinds of document HR keeps per employee; free text is allowed too. */
+export const DOCUMENT_CATEGORIES = [
+  'Aadhaar card',
+  'PAN card',
+  'Passport',
+  'Offer letter',
+  'Appointment letter',
+  'Relieving letter',
+  'Experience letter',
+  'Degree certificate',
+  'Payslip',
+  'Form 16',
+  'Bank proof',
+  'Receipt',
+  'Policy',
+  'Contract',
+  'Other',
+] as const;
+
+/** Files the API accepts, by MIME type, with the extension each must carry. */
+export const DOCUMENT_MIME_TYPES: Record<string, string[]> = {
+  'application/pdf': ['pdf'],
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/webp': ['webp'],
+  'application/msword': ['doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['docx'],
+  'application/vnd.ms-excel': ['xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['xlsx'],
+  'text/csv': ['csv'],
+};
+
+export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
+
+/** Form fields sent with an upload (the file itself is the `file` part). */
+export const uploadDocumentSchema = z
+  .object({
+    employeeId: z.string().uuid().optional(),
+    folderId: z.string().uuid().optional(),
+    category: z.string().trim().min(1).max(60).default('Other'),
+    name: z.string().trim().min(1).max(160).optional(),
+  })
+  .refine((v) => Boolean(v.employeeId) !== Boolean(v.folderId), {
+    message: 'Choose either an employee or a folder',
+    path: ['employeeId'],
+  });
+export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
+
+export const listDocumentsQuerySchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  folderId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+  search: z.string().trim().max(100).optional(),
+  status: z.enum(DOCUMENT_STATUSES).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
+
+export const updateDocumentSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+  category: z.string().trim().min(1).max(60).optional(),
+  status: z.enum(DOCUMENT_STATUSES).optional(),
+});
+export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;
+
+export const createFolderSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  visibility: z.enum(['EVERYONE', 'HR']).default('HR'),
+});
+export type CreateFolderInput = z.infer<typeof createFolderSchema>;
+
+// ---------- Onboarding and offboarding checklists ----------
+
+export const CHECKLIST_KINDS = ['ONBOARDING', 'OFFBOARDING'] as const;
+export type ChecklistKind = (typeof CHECKLIST_KINDS)[number];
+
+/** Who a task falls to. Resolved per employee: their manager, the employee, HR or IT. */
+export const TASK_ASSIGNEES = ['HR', 'MANAGER', 'EMPLOYEE', 'IT'] as const;
+export type TaskAssignee = (typeof TASK_ASSIGNEES)[number];
+
+export const templateTaskSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(1000).nullish(),
+  assignee: z.enum(TASK_ASSIGNEES),
+  /** Days from the joining date (onboarding) or last working day (offboarding); can be negative. */
+  dueOffsetDays: z.number().int().min(-180).max(365).default(0),
+  /** When set, the task points the person to upload this kind of document. */
+  documentCategory: z.string().trim().max(60).nullish(),
+});
+export type TemplateTaskInput = z.infer<typeof templateTaskSchema>;
+
+export const createTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  kind: z.enum(CHECKLIST_KINDS),
+  isDefault: z.boolean().default(false),
+  tasks: z.array(templateTaskSchema).min(1).max(60),
+});
+export type CreateTemplateInput = z.infer<typeof createTemplateSchema>;
+
+export const updateTemplateSchema = createTemplateSchema.omit({ kind: true }).partial();
+export type UpdateTemplateInput = z.infer<typeof updateTemplateSchema>;
+
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-30')
+  .refine((v) => !Number.isNaN(Date.parse(v)), 'Enter a real date');
+
+export const startChecklistSchema = z.object({
+  kind: z.enum(CHECKLIST_KINDS),
+  templateId: z.string().uuid().optional(),
+  /** Joining date for onboarding (defaults to the employee's); last working day for offboarding. */
+  startDate: isoDate.optional(),
+  /** Offboarding only, recorded on the exit. */
+  reason: z.enum(['RESIGNATION', 'TERMINATION', 'RETIREMENT', 'CONTRACT_END', 'OTHER']).optional(),
+});
+export type StartChecklistInput = z.infer<typeof startChecklistSchema>;
+
+export const listChecklistsQuerySchema = z.object({
+  kind: z.enum(CHECKLIST_KINDS).optional(),
+  status: z.enum(['OPEN', 'COMPLETED', 'CANCELLED']).optional(),
+  employeeId: z.string().uuid().optional(),
+  /** Only checklists with a task waiting on the caller. */
+  mine: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+});
+export type ListChecklistsQuery = z.infer<typeof listChecklistsQuerySchema>;
+
+export const updateTaskSchema = z.object({
+  done: z.boolean(),
+  note: z.string().trim().max(500).nullish(),
+});
+export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+
+export const addTaskSchema = templateTaskSchema
+  .omit({ dueOffsetDays: true })
+  .extend({ dueDate: isoDate.optional() });
+export type AddTaskInput = z.infer<typeof addTaskSchema>;
+
+// ---------- Attendance and leave ----------
+
+/** Day codes on the register. Leave types add their own codes (PL, SL, FV…). */
+export const ATTENDANCE_MARKS = ['P', 'A', 'HD'] as const;
+export type AttendanceMark = (typeof ATTENDANCE_MARKS)[number];
+
+export const TONES = ['primary', 'detail', 'success', 'warning', 'danger', 'info'] as const;
+
+export const leaveTypeSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{1,4}$/, 'Use 1 to 4 letters, like PL'),
+  tone: z.enum(TONES).default('info'),
+  /** null means no limit. */
+  daysPerYear: z.number().int().min(0).max(366).nullable().default(null),
+  accrual: z.enum(['YEARLY', 'MONTHLY']).default('YEARLY'),
+  carryForward: z.number().int().min(0).max(366).default(0),
+  /** Ask for a document when a request is longer than this many days. */
+  documentAfterDays: z.number().int().min(1).max(366).nullable().default(null),
+  paid: z.boolean().default(true),
+  approver: z.enum(['MANAGER', 'HR']).default('MANAGER'),
+  /** Field visits and work from home count as present on the register. */
+  countsAsPresent: z.boolean().default(false),
+  /** Earned by working on a weekly off or holiday, not given yearly. */
+  isCompOff: z.boolean().default(false),
+  /** Comp-off credits lapse after this many days. */
+  validityDays: z.number().int().min(1).max(366).nullable().default(null),
+  /** Unused days can be paid out at year end or exit. */
+  encashable: z.boolean().default(false),
+  active: z.boolean().default(true),
+});
+export type LeaveTypeInput = z.infer<typeof leaveTypeSchema>;
+export const updateLeaveTypeSchema = leaveTypeSchema.partial();
+export type UpdateLeaveTypeInput = z.infer<typeof updateLeaveTypeSchema>;
+
+const day = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-21')
+  .refine((v) => !Number.isNaN(Date.parse(v)), 'Enter a real date');
+
+export const createLeaveRequestSchema = z
+  .object({
+    /** HR can apply on someone's behalf; otherwise it's for the caller. */
+    employeeId: z.string().uuid().optional(),
+    leaveTypeId: z.string().uuid(),
+    startDate: day,
+    endDate: day,
+    halfDay: z.boolean().default(false),
+    reason: z.string().trim().max(500).nullish(),
+  })
+  .refine((v) => v.endDate >= v.startDate, {
+    message: 'The end date is before the start date',
+    path: ['endDate'],
+  })
+  .refine((v) => !v.halfDay || v.startDate === v.endDate, {
+    message: 'A half day is a single day',
+    path: ['halfDay'],
+  });
+export type CreateLeaveRequestInput = z.infer<typeof createLeaveRequestSchema>;
+
+export const decideLeaveSchema = z.object({
+  decision: z.enum(['APPROVE', 'REJECT']),
+  note: z.string().trim().max(500).nullish(),
+});
+export type DecideLeaveInput = z.infer<typeof decideLeaveSchema>;
+
+export const listLeaveQuerySchema = z.object({
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']).optional(),
+  employeeId: z.string().uuid().optional(),
+  /** Only requests the caller can decide. */
+  toDecide: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+});
+export type ListLeaveQuery = z.infer<typeof listLeaveQuerySchema>;
+
+export const registerQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'Use a month like 2026-10'),
+  departmentId: z.string().uuid().optional(),
+});
+export type RegisterQuery = z.infer<typeof registerQuerySchema>;
+
+export const markAttendanceSchema = z.object({
+  employeeId: z.string().uuid(),
+  date: day,
+  /** P, A or HD, or a leave type code to record a one-day approved leave. */
+  code: z.string().trim().toUpperCase().min(1).max(4),
+  note: z.string().trim().max(300).nullish(),
+});
+export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
+
+// ---------- Assets ----------
+
+export const ASSET_CATEGORIES = [
+  'Laptop',
+  'Monitor',
+  'Phone',
+  'SIM card',
+  'ID card',
+  'Access card',
+  'Headset',
+  'Furniture',
+  'Vehicle',
+] as const;
+export const ASSET_CONDITIONS = ['NEW', 'GOOD', 'FAIR', 'DAMAGED'] as const;
+export const ASSET_STATUSES = ['ASSIGNED', 'IN_STOCK', 'IN_REPAIR', 'RETIRED', 'LOST'] as const;
+
+const optionalDay = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-21')
+  .nullish();
+
+export const createAssetSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  category: z.enum(ASSET_CATEGORIES),
+  serial: z.string().trim().min(1).max(80),
+  purchasedOn: optionalDay,
+  /** Rupees, whole. */
+  cost: z.number().int().min(0).max(1_00_00_00_000).default(0),
+  warrantyUntil: optionalDay,
+  location: z.string().trim().max(80).nullish(),
+  condition: z.enum(ASSET_CONDITIONS).default('NEW'),
+  notes: z.string().trim().max(500).nullish(),
+});
+export type CreateAssetInput = z.infer<typeof createAssetSchema>;
+export const updateAssetSchema = createAssetSchema.partial();
+export type UpdateAssetInput = z.infer<typeof updateAssetSchema>;
+
+export const listAssetsQuerySchema = z.object({
+  status: z.enum(ASSET_STATUSES).optional(),
+  category: z.enum(ASSET_CATEGORIES).optional(),
+  holderId: z.string().uuid().optional(),
+  search: z.string().trim().max(100).optional(),
+});
+export type ListAssetsQuery = z.infer<typeof listAssetsQuerySchema>;
+
+export const assignAssetSchema = z.object({
+  employeeId: z.string().uuid(),
+  note: z.string().trim().max(300).nullish(),
+});
+export type AssignAssetInput = z.infer<typeof assignAssetSchema>;
+
+export const returnAssetSchema = z.object({
+  condition: z.enum(ASSET_CONDITIONS),
+  note: z.string().trim().max(300).nullish(),
+});
+export type ReturnAssetInput = z.infer<typeof returnAssetSchema>;
+
+export const assetStatusSchema = z.object({
+  status: z.enum(['IN_REPAIR', 'IN_STOCK', 'RETIRED', 'LOST']),
+  note: z.string().trim().max(300).nullish(),
+});
+export type AssetStatusInput = z.infer<typeof assetStatusSchema>;
+
+// ---------- Overtime and expense claims ----------
+
+export const CLAIM_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'ON_HOLD', 'PAID'] as const;
+export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
+
+export const createOvertimeSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-21'),
+  hours: z.number().min(0.5).max(16),
+  reason: z.string().trim().min(2).max(300),
+});
+export type CreateOvertimeInput = z.infer<typeof createOvertimeSchema>;
+
+export const createExpenseSchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  categoryId: z.string().uuid(),
+  spentOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-21'),
+  /** Whole rupees. */
+  amount: z.number().int().min(1).max(10_00_000),
+  description: z.string().trim().min(2).max(300),
+  /** A document already uploaded to the employee's files (category Receipt). */
+  receiptDocumentId: z.string().uuid().nullish(),
+});
+export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
+
+export const decideClaimsSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  decision: z.enum(['APPROVE', 'REJECT', 'HOLD', 'PAID']),
+  note: z.string().trim().max(300).nullish(),
+});
+export type DecideClaimsInput = z.infer<typeof decideClaimsSchema>;
+
+export const listClaimsQuerySchema = z.object({
+  status: z.enum(CLAIM_STATUSES).optional(),
+  employeeId: z.string().uuid().optional(),
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
+});
+export type ListClaimsQuery = z.infer<typeof listClaimsQuerySchema>;
+
+export const claimCategorySchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  /** Most that one claim may be for; null means no limit. */
+  limitPerClaim: z.number().int().min(1).max(10_00_000).nullable().default(null),
+  needsReceipt: z.boolean().default(true),
+  active: z.boolean().default(true),
+});
+export type ClaimCategoryInput = z.infer<typeof claimCategorySchema>;
+
+// ---------- Payroll ----------
+
+export const salaryStructureSchema = z.object({
+  /** Yearly cost to company in whole rupees. */
+  annualCtc: z.number().int().min(10_000).max(10_00_00_000),
+  /** Basic as a percentage of gross, usually 40–50. */
+  basicPercent: z.number().int().min(30).max(80).default(50),
+  /** HRA at 50% of basic for Mumbai, Delhi, Kolkata and Chennai; 40% elsewhere. */
+  metro: z.boolean().default(false),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-01'),
+});
+export type SalaryStructureInput = z.infer<typeof salaryStructureSchema>;
+
+export const createPayrollRunSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'Use a month like 2026-10'),
+});
+export type CreatePayrollRunInput = z.infer<typeof createPayrollRunSchema>;
+
+export const markFiledSchema = z.object({
+  key: z.string().trim().min(1).max(40),
+  period: z.string().trim().min(1).max(20),
+  reference: z.string().trim().max(80).nullish(),
+});
+export type MarkFiledInput = z.infer<typeof markFiledSchema>;
+
+// ---------- Performance ----------
+
+export const GOAL_STATUSES = ['ON_TRACK', 'AT_RISK', 'BEHIND', 'DONE'] as const;
+export const GOAL_SCOPES = ['COMPANY', 'TEAM', 'PERSONAL'] as const;
+
+export const goalSchema = z.object({
+  title: z.string().trim().min(2).max(160),
+  description: z.string().trim().max(1000).nullish(),
+  /** Whose goal it is. Company goals still have an owner who drives them. */
+  ownerId: z.string().uuid().optional(),
+  scope: z.enum(GOAL_SCOPES).default('PERSONAL'),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-12-31'),
+  progress: z.number().int().min(0).max(100).default(0),
+  status: z.enum(GOAL_STATUSES).default('ON_TRACK'),
+});
+export type GoalInput = z.infer<typeof goalSchema>;
+export const updateGoalSchema = goalSchema.partial();
+export type UpdateGoalInput = z.infer<typeof updateGoalSchema>;
+
+export const reviewCycleSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  closesOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-12-15'),
+});
+export type ReviewCycleInput = z.infer<typeof reviewCycleSchema>;
+
+/** 1 Needs improvement · 2 Developing · 3 Meets · 4 Exceeds · 5 Outstanding */
+export const reviewInputSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comments: z.string().trim().min(2).max(4000),
+});
+export type ReviewInput = z.infer<typeof reviewInputSchema>;
+
+export const kudosSchema = z.object({
+  toId: z.string().uuid(),
+  value: z.string().trim().min(2).max(40),
+  reason: z.string().trim().min(2).max(300),
+});
+export type KudosInput = z.infer<typeof kudosSchema>;
+
+export const COURSE_MODES = ['GOOGLE_MEET', 'ZOOM', 'TEAMS', 'IN_PERSON', 'SELF_PACED'] as const;
+
+const courseBase = z.object({
+  title: z.string().trim().min(2).max(160),
+  description: z.string().trim().max(2000).nullish(),
+  category: z.string().trim().min(2).max(40),
+  leadId: z.string().uuid().nullish(),
+  /** Leave empty for everyone. */
+  departmentId: z.string().uuid().nullish(),
+  mandatory: z.boolean().default(false),
+  seats: z.number().int().min(1).max(10000).nullish(),
+  startsOn: isoDate,
+  endsOn: isoDate,
+  hours: z.number().min(0.5).max(500).default(1),
+  mode: z.enum(COURSE_MODES).default('GOOGLE_MEET'),
+  meetingLink: z.string().trim().url().max(500).nullish().or(z.literal('')),
+});
+export const courseSchema = courseBase.refine((c) => c.endsOn >= c.startsOn, {
+  message: 'The course ends before it starts',
+  path: ['endsOn'],
+});
+export type CourseInput = z.infer<typeof courseSchema>;
+export const updateCourseSchema = courseBase.partial();
+export type UpdateCourseInput = z.infer<typeof updateCourseSchema>;
+
+export const courseSessionSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  startsAt: z.string().datetime({ offset: true }),
+  minutes: z.number().int().min(10).max(600).default(60),
+  location: z.string().trim().max(200).nullish(),
+});
+export type CourseSessionInput = z.infer<typeof courseSessionSchema>;
+
+export const enrollSchema = z.object({ employeeIds: z.array(z.string().uuid()).min(1).max(500) });
+export const progressSchema = z.object({ progress: z.number().int().min(0).max(100) });
+
+export const POST_KINDS = ['UPDATE', 'WIN', 'ANNOUNCEMENT', 'EVENT'] as const;
+export const postSchema = z
+  .object({
+    kind: z.enum(POST_KINDS).default('UPDATE'),
+    body: z.string().trim().min(1).max(3000),
+    /** Leave empty for everyone. */
+    departmentId: z.string().uuid().nullish(),
+    eventTitle: z.string().trim().min(2).max(120).nullish(),
+    eventStartsAt: z.string().datetime({ offset: true }).nullish(),
+    eventEndsAt: z.string().datetime({ offset: true }).nullish(),
+    eventLocation: z.string().trim().max(200).nullish(),
+  })
+  .refine((p) => p.kind !== 'EVENT' || (p.eventTitle && p.eventStartsAt), {
+    message: 'An event needs a title and a start time',
+    path: ['eventTitle'],
+  });
+export type PostInput = z.infer<typeof postSchema>;
+
+export const commentSchema = z.object({ body: z.string().trim().min(1).max(1000) });
+export const rsvpSchema = z.object({ answer: z.enum(['GOING', 'MAYBE', 'NOT_GOING']) });
+
+export const pollSchema = z.object({
+  question: z.string().trim().min(4).max(200),
+  options: z.array(z.string().trim().min(1).max(80)).min(2).max(6),
+  closesOn: isoDate,
+});
+export type PollInput = z.infer<typeof pollSchema>;
+
+export const pulseSurveySchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  closesOn: isoDate,
+});
+export type PulseSurveyInput = z.infer<typeof pulseSurveySchema>;
+
+export const pulseResponseSchema = z.object({
+  score: z.number().int().min(0).max(10),
+  recognised: z.boolean(),
+  managerSupport: z.boolean(),
+  workloadFair: z.boolean(),
+  comment: z.string().trim().max(1000).nullish(),
+});
+export type PulseResponseInput = z.infer<typeof pulseResponseSchema>;
+
+export const messageSchema = z.object({ body: z.string().trim().min(1).max(4000) });
+export const newConversationSchema = z.object({
+  toIds: z.array(z.string().uuid()).min(1).max(50),
+  subject: z.string().trim().max(160).optional(),
+  body: z.string().trim().min(1).max(4000),
+});
+export type NewConversationInput = z.infer<typeof newConversationSchema>;
+export const channelSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9][a-z0-9-]{1,39}$/, 'Use 2 to 40 lower-case letters, numbers or dashes'),
+  description: z.string().trim().max(200).nullish(),
+});
+export type ChannelInput = z.infer<typeof channelSchema>;
+
+const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a time like 09:30');
+
+export const shiftSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  startTime: clock,
+  endTime: clock,
+  graceMinutes: z.number().int().min(0).max(240).default(15),
+  fullDayMinutes: z.number().int().min(60).max(1440).default(480),
+  halfDayMinutes: z.number().int().min(30).max(720).default(240),
+  weeklyOffs: z.array(z.number().int().min(0).max(6)).max(6).default([0, 6]),
+  isDefault: z.boolean().default(false),
+});
+export type ShiftInput = z.infer<typeof shiftSchema>;
+export const updateShiftSchema = shiftSchema.partial();
+export type UpdateShiftInput = z.infer<typeof updateShiftSchema>;
+export const assignShiftSchema = z.object({
+  employeeIds: z.array(z.string().uuid()).min(1).max(500),
+});
+
+export const holidaySchema = z.object({
+  date: isoDate,
+  name: z.string().trim().min(2).max(80),
+  optional: z.boolean().default(false),
+  /** Leave empty for every location. */
+  locationId: z.string().uuid().nullish(),
+});
+export type HolidayInput = z.infer<typeof holidaySchema>;
+
+export const regularisationSchema = z
+  .object({
+    /** HR can raise one for someone else; otherwise it's for the caller. */
+    employeeId: z.string().uuid().optional(),
+    date: isoDate,
+    checkIn: clock.nullish(),
+    checkOut: clock.nullish(),
+    reason: z.string().trim().min(3).max(500),
+  })
+  .refine((r) => r.checkIn || r.checkOut, {
+    message: 'Give a check-in or check-out time',
+    path: ['checkIn'],
+  })
+  .refine((r) => !r.checkIn || !r.checkOut || r.checkOut > r.checkIn, {
+    message: 'Check-out must be after check-in',
+    path: ['checkOut'],
+  });
+export type RegularisationInput = z.infer<typeof regularisationSchema>;
+export const decideRegularisationSchema = z.object({
+  decision: z.enum(['APPROVE', 'REJECT']),
+  note: z.string().trim().max(300).nullish(),
+});
+export type DecideRegularisationInput = z.infer<typeof decideRegularisationSchema>;
+
+export const deviceSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  serialNumber: z.string().trim().min(3).max(60),
+  locationId: z.string().uuid().nullish(),
+});
+export type DeviceInput = z.infer<typeof deviceSchema>;
+export const updateDeviceSchema = z.object({
+  name: z.string().trim().min(2).max(60).optional(),
+  locationId: z.string().uuid().nullish(),
+  active: z.boolean().optional(),
+});
+export type UpdateDeviceInput = z.infer<typeof updateDeviceSchema>;
+
+/** What a device (or a bridge in front of it) sends to the punch API. */
+export const punchBatchSchema = z.object({
+  punches: z
+    .array(
+      z.object({
+        userId: z.string().trim().min(1).max(40),
+        /** ISO time with an offset, e.g. 2026-10-23T09:12:00+05:30. */
+        time: z.string().datetime({ offset: true }),
+        direction: z.enum(['IN', 'OUT', 'UNKNOWN']).default('UNKNOWN'),
+      }),
+    )
+    .min(1)
+    .max(1000),
+});
+export type PunchBatchInput = z.infer<typeof punchBatchSchema>;
+export const mapDeviceUserSchema = z.object({
+  deviceUserId: z.string().trim().min(1).max(40),
+  employeeId: z.string().uuid(),
+});
+
+export const leaveAdjustmentSchema = z.object({
+  employeeId: z.string().uuid(),
+  leaveTypeId: z.string().uuid(),
+  year: z.number().int().min(2000).max(2100),
+  /** Positive adds days, negative takes them away. */
+  days: z
+    .number()
+    .min(-366)
+    .max(366)
+    .refine((d) => d !== 0 && Number.isInteger(d * 2), 'Use whole or half days'),
+  kind: z.enum(['OPENING', 'ADJUSTMENT']).default('ADJUSTMENT'),
+  note: z.string().trim().min(2).max(300),
+});
+export type LeaveAdjustmentInput = z.infer<typeof leaveAdjustmentSchema>;
+
+export const leaveYearEndSchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+  /** Pay out what can't be carried forward for encashable types, instead of letting it lapse. */
+  encash: z.boolean().default(false),
+});
+export type LeaveYearEndInput = z.infer<typeof leaveYearEndSchema>;
+
+export const monthCloseSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  /** What unmarked working days become: absent (unpaid) or present. */
+  unmarkedAs: z.enum(['A', 'P']).default('A'),
+});
+export type MonthCloseInput = z.infer<typeof monthCloseSchema>;
+
+// ---------- Account security ----------
+
+export const mfaVerifySchema = z.object({
+  challenge: z.string().min(20).max(200),
+  /** Six digits from the authenticator app, or a recovery code. */
+  code: z.string().trim().min(6).max(20),
+});
+export const emailOnlySchema = z.object({ email });
+export const forgotPasswordSchema = z.object({ workspace: slug, email });
+export const resetPasswordSchema = z.object({ token: z.string().min(20).max(200), password });
+export const verifyEmailSchema = z.object({ token: z.string().min(20).max(200) });
+export const changePasswordSchema = z.object({ current: z.string().min(1).max(128), password });
+export const mfaCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code'),
+});
+export const mfaDisableSchema = z.object({
+  password: z.string().min(1).max(128),
+  code: z.string().trim().min(6).max(20),
+});

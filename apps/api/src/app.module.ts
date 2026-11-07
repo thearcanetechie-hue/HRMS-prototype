@@ -3,6 +3,16 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import type { NextFunction, Request, Response } from 'express';
+import { AssetsModule } from './assets/assets.module';
+import { ClaimsModule } from './claims/claims.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { PayrollModule } from './payroll/payroll.module';
+import { PerformanceModule } from './performance/performance.module';
+import { LearningModule } from './learning/learning.module';
+import { EngagementModule } from './engagement/engagement.module';
+import { InboxModule } from './inbox/inbox.module';
+import { PoliciesModule } from './policies/policies.module';
+import { AttendanceModule } from './attendance/attendance.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
@@ -10,6 +20,7 @@ import { PrismaExceptionFilter } from './common/prisma-exception.filter';
 import { requestContext } from './common/request-context';
 import { validateEnv } from './config';
 import { CryptoModule } from './crypto/crypto.module';
+import { DocumentsModule } from './documents/documents.module';
 import { EmployeesModule } from './employees/employees.module';
 import { HealthController } from './health/health.controller';
 import { OrgModule } from './org/org.module';
@@ -27,6 +38,17 @@ import { RolesModule } from './roles/roles.module';
     OrgModule,
     EmployeesModule,
     RolesModule,
+    DocumentsModule,
+    AttendanceModule,
+    AssetsModule,
+    DashboardModule,
+    ClaimsModule,
+    PayrollModule,
+    PerformanceModule,
+    LearningModule,
+    EngagementModule,
+    InboxModule,
+    PoliciesModule,
   ],
   controllers: [HealthController],
   providers: [

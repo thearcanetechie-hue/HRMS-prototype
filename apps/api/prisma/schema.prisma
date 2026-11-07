@@ -71,6 +71,54 @@ model Tenant {
   locations     Location[]
   legalEntities LegalEntity[]
   auditLogs     AuditLog[]
+  documents     Document[]
+  folders       DocumentFolder[]
+  checklistTemplates ChecklistTemplate[]
+  checklists    EmployeeChecklist[]
+  leaveTypes    LeaveType[]
+  leaveRequests LeaveRequest[]
+  attendance    AttendanceRecord[]
+  assets        Asset[]
+  assetEvents   AssetEvent[]
+  overtime      OvertimeRequest[]
+  expenses      ExpenseClaim[]
+  claimCategories ClaimCategory[]
+  salaries      SalaryStructure[]
+  payrollRuns   PayrollRun[]
+  payslips      Payslip[]
+  filings       ComplianceFiling[]
+  goals         Goal[]
+  reviewCycles  ReviewCycle[]
+  reviews       Review[]
+  kudos         Kudos[]
+  courses       Course[]
+  courseSessions CourseSession[]
+  enrollments   Enrollment[]
+  posts         Post[]
+  postReactions PostReaction[]
+  postComments  PostComment[]
+  eventRsvps    EventRsvp[]
+  polls         Poll[]
+  pollOptions   PollOption[]
+  pollVotes     PollVote[]
+  pulseSurveys  PulseSurvey[]
+  pulseParticipants PulseParticipant[]
+  pulseResponses PulseResponse[]
+  conversations Conversation[]
+  conversationMembers ConversationMember[]
+  messages      Message[]
+  shifts        Shift[]
+  holidays      Holiday[]
+  regularisations AttendanceRegularisation[]
+  biometricDevices BiometricDevice[]
+  punches       Punch[]
+  leaveLedger   LeaveLedger[]
+  leaveYearCloses LeaveYearClose[]
+  attendanceMonths AttendanceMonth[]
+  policies      Policy[]
+  taxDeclarations TaxDeclaration[]
+  payItems      PayItem[]
+  settlements   Settlement[]
 }
 
 model User {
@@ -81,6 +129,18 @@ model User {
   fullName     String
   status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?
+  emailVerifiedAt   DateTime?
+  passwordChangedAt DateTime?
+  /// Wrong passwords in a row; reset on success. Too many locks the login for a while.
+  failedLogins      Int       @default(0)
+  lockedUntil       DateTime?
+  /// Authenticator app (TOTP) secret, encrypted; set when two-step sign-in is on.
+  mfaSecretEnc      String?
+  mfaEnabledAt      DateTime?
+  /// Last TOTP time step accepted, so a code can't be used twice.
+  mfaLastStep       Int?
+  termsAcceptedAt   DateTime?
+  termsVersion      String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -89,6 +149,9 @@ model User {
   sessions    Session[]
   employee    Employee?
   invitations Invitation[]
+  authTokens  AuthToken[]
+  recoveryCodes RecoveryCode[]
+  identities  ExternalIdentity[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -134,11 +197,17 @@ model Session {
   revokedAt DateTime?
   userAgent String?
   ip        String?
+  /// "Keep me signed in": false makes a browser-session cookie with a short lifetime.
+  persistent Boolean  @default(true)
+  /// The first session of a chain of refreshes, so a device keeps one identity.
+  familyId  String?   @db.Uuid
+  lastUsedAt DateTime @default(now())
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([familyId])
 }
 
 model LegalEntity {
@@ -170,6 +239,8 @@ model Location {
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employees Employee[]
+  holidays  Holiday[]
+  devices   BiometricDevice[]
 
   @@unique([tenantId, name])
 }
@@ -182,6 +253,8 @@ model Department {
   parentId  String?  @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  courses   Course[]
+  posts     Post[]
 
   tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
@@ -221,6 +294,9 @@ model Employee {
   departmentId   String?        @db.Uuid
   designationId  String?        @db.Uuid
   locationId     String?        @db.Uuid
+  shiftId        String?        @db.Uuid
+  /// The person's user number on biometric devices.
+  biometricId    String?
   legalEntityId  String?        @db.Uuid
   managerId      String?        @db.Uuid
   /// Values for tenant-defined custom fields (no-code).
@@ -233,12 +309,44 @@ model Employee {
   department  Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   designation Designation?     @relation(fields: [designationId], references: [id], onDelete: SetNull)
   location    Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shift       Shift?           @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   legalEntity LegalEntity?     @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
   manager     Employee?        @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
   reports     Employee[]       @relation("Reports")
   profile     EmployeeProfile?
+  documents   Document[]
+  checklists  EmployeeChecklist[]
+  leaveRequests LeaveRequest[]
+  attendance  AttendanceRecord[]
+  assets      Asset[]
+  overtime    OvertimeRequest[]
+  expenses    ExpenseClaim[]
+  salaries    SalaryStructure[]
+  payslips    Payslip[]
+  goals       Goal[]
+  reviews     Review[]          @relation("Reviewee")
+  reviewsGiven Review[]         @relation("Reviewer")
+  kudosSent   Kudos[]           @relation("KudosFrom")
+  kudosReceived Kudos[]         @relation("KudosTo")
+  coursesLed    Course[]          @relation("CourseLead")
+  enrollments   Enrollment[]
+  posts         Post[]
+  postReactions PostReaction[]
+  postComments  PostComment[]
+  eventRsvps    EventRsvp[]
+  pollVotes     PollVote[]
+  pulseParticipations PulseParticipant[]
+  regularisations AttendanceRegularisation[]
+  punches       Punch[]
+  leaveLedger   LeaveLedger[]
+  taxDeclarations TaxDeclaration[]
+  payItems      PayItem[]
+  settlement    Settlement[]
+  conversations ConversationMember[]
+  messages      Message[]
 
   @@unique([tenantId, employeeCode])
+  @@unique([tenantId, biometricId])
   @@unique([tenantId, workEmail])
   @@index([tenantId, status])
   @@index([tenantId, departmentId])
@@ -316,4 +424,1295 @@ model AuditLog {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, entity, entityId])
+}
+
+enum DocumentStatus {
+  PROCESSING
+  NEEDS_REVIEW
+  VERIFIED
+  SIGNED
+  ISSUED
+  REJECTED
+}
+
+enum FolderVisibility {
+  /// Everyone in the workspace can read, for example company policies.
+  EVERYONE
+  /// Only people with document.read, for example payroll and contracts.
+  HR
+}
+
+/// Company-level folders. Employee files are not folders: they hang off the employee.
+model DocumentFolder {
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @db.Uuid
+  name       String
+  visibility FolderVisibility @default(HR)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documents Document[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+/// A stored file. Belongs to exactly one employee or one company folder. The bytes live in
+/// storage (src/documents/document-storage.ts), encrypted with the workspace key; only the
+/// storage key is kept here. Deleting sets deletedAt so the audit trail keeps its target.
+model Document {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @db.Uuid
+  employeeId   String?        @db.Uuid
+  folderId     String?        @db.Uuid
+  name         String
+  category     String         @default("Other")
+  mimeType     String
+  size         Int
+  sha256       String
+  storageKey   String
+  status       DocumentStatus @default(NEEDS_REVIEW)
+  uploadedById String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  deletedAt    DateTime?
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee?       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  folder   DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, employeeId])
+  @@index([tenantId, folderId])
+  @@index([tenantId, createdAt])
+}
+
+enum ChecklistKind {
+  ONBOARDING
+  OFFBOARDING
+}
+
+enum ChecklistStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskAssignee {
+  HR
+  MANAGER
+  EMPLOYEE
+  IT
+}
+
+/// A reusable list of joining or exit tasks. HR edits these without code; one per kind is the default.
+model ChecklistTemplate {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @db.Uuid
+  name      String
+  kind      ChecklistKind
+  isDefault Boolean       @default(false)
+  /// [{ title, description, assignee, dueOffsetDays, documentCategory }] in order.
+  tasks     Json          @default("[]")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checklists EmployeeChecklist[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, kind])
+}
+
+/// One person's onboarding or offboarding run, copied from a template so later template edits
+/// don't change checklists already under way.
+model EmployeeChecklist {
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @db.Uuid
+  employeeId  String          @db.Uuid
+  templateId  String?         @db.Uuid
+  kind        ChecklistKind
+  status      ChecklistStatus @default(OPEN)
+  /// Joining date for onboarding, last working day for offboarding. Task due dates count from it.
+  startDate   DateTime        @db.Date
+  reason      String?
+  createdById String?         @db.Uuid
+  createdAt   DateTime        @default(now())
+  completedAt DateTime?
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  template ChecklistTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  tasks    ChecklistTask[]
+
+  @@index([tenantId, status, kind])
+  @@index([tenantId, employeeId])
+}
+
+model ChecklistTask {
+  id               String       @id @default(uuid()) @db.Uuid
+  tenantId         String       @db.Uuid
+  checklistId      String       @db.Uuid
+  position         Int
+  title            String
+  description      String?
+  assignee         TaskAssignee
+  dueDate          DateTime     @db.Date
+  documentCategory String?
+  doneAt           DateTime?
+  doneById         String?      @db.Uuid
+  note             String?
+
+  checklist EmployeeChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, checklistId])
+}
+
+enum LeaveAccrual {
+  YEARLY
+  MONTHLY
+}
+
+enum LeaveApprover {
+  MANAGER
+  HR
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum AttendanceSource {
+  WEB
+  BIOMETRIC
+  HR
+  REGULARISED
+}
+
+/// A kind of leave the company offers. HR adds and edits these without code.
+model LeaveType {
+  id                String        @id @default(uuid()) @db.Uuid
+  tenantId          String        @db.Uuid
+  name              String
+  /// Short code shown on the register, like PL or SL.
+  code              String
+  tone              String        @default("info")
+  /// null means no yearly limit.
+  daysPerYear       Int?
+  accrual           LeaveAccrual  @default(YEARLY)
+  carryForward      Int           @default(0)
+  documentAfterDays Int?
+  paid              Boolean       @default(true)
+  approver          LeaveApprover @default(MANAGER)
+  countsAsPresent   Boolean       @default(false)
+  /// Earned by working on a weekly off or holiday instead of given yearly.
+  isCompOff         Boolean       @default(false)
+  /// Comp-off credits lapse after this many days.
+  validityDays      Int?
+  /// Unused days can be paid out at year end or exit.
+  encashable        Boolean       @default(false)
+  active            Boolean       @default(true)
+  position          Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requests LeaveRequest[]
+  ledger   LeaveLedger[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
+}
+
+model LeaveRequest {
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @db.Uuid
+  employeeId   String      @db.Uuid
+  leaveTypeId  String      @db.Uuid
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  halfDay      Boolean     @default(false)
+  /// Working days (Monday to Friday) the request covers; 0.5 for a half day.
+  days         Decimal     @db.Decimal(5, 1)
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  requestedById String?    @db.Uuid
+  decidedById  String?     @db.Uuid
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime    @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([tenantId, employeeId, startDate])
+}
+
+/// One person's attendance for one day: a check-in from the web or a biometric device, or HR's mark.
+model AttendanceRecord {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  employeeId  String           @db.Uuid
+  date        DateTime         @db.Date
+  /// P (present), A (absent) or HD (half day).
+  status      String
+  checkIn     DateTime?
+  checkOut    DateTime?
+  source      AttendanceSource @default(WEB)
+  note        String?
+  markedById  String?          @db.Uuid
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([tenantId, date])
+}
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  DAMAGED
+}
+
+enum AssetStatus {
+  ASSIGNED
+  IN_STOCK
+  IN_REPAIR
+  RETIRED
+  LOST
+}
+
+/// Something the company owns and hands out: a laptop, phone, ID card…
+model Asset {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  /// Register number like AST-0007, assigned in order per workspace.
+  tag           String
+  name          String
+  category      String
+  serial        String
+  purchasedOn   DateTime?      @db.Date
+  cost          Int            @default(0)
+  warrantyUntil DateTime?      @db.Date
+  location      String?
+  condition     AssetCondition @default(NEW)
+  status        AssetStatus    @default(IN_STOCK)
+  /// Who holds it while ASSIGNED.
+  holderId      String?        @db.Uuid
+  /// When the current status started (assigned on, sent for repair on…).
+  since         DateTime?      @db.Date
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  holder Employee?    @relation(fields: [holderId], references: [id], onDelete: SetNull)
+  events AssetEvent[]
+
+  @@unique([tenantId, tag])
+  @@unique([tenantId, serial])
+  @@index([tenantId, status])
+  @@index([holderId])
+}
+
+/// What happened to an asset, newest first on screen.
+model AssetEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  assetId    String   @db.Uuid
+  /// added, assigned, returned, repair, in_stock, retired, lost, updated
+  kind       String
+  text       String
+  employeeId String?  @db.Uuid
+  byId       String?  @db.Uuid
+  at         DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assetId, at])
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ON_HOLD
+  PAID
+}
+
+/// Extra hours someone worked. Pay is worked out in payroll (2x hourly basic by default).
+model OvertimeRequest {
+  id            String      @id @default(uuid()) @db.Uuid
+  tenantId      String      @db.Uuid
+  employeeId    String      @db.Uuid
+  date          DateTime    @db.Date
+  hours         Decimal     @db.Decimal(4, 1)
+  reason        String
+  status        ClaimStatus @default(PENDING)
+  requestedById String?     @db.Uuid
+  decidedById   String?     @db.Uuid
+  decidedAt     DateTime?
+  decisionNote  String?
+  createdAt     DateTime    @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, employeeId, date])
+}
+
+/// Kinds of expense people can claim, with an optional per-claim limit. HR edits these.
+model ClaimCategory {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  name          String
+  limitPerClaim Int?
+  needsReceipt  Boolean  @default(true)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  claims ExpenseClaim[]
+
+  @@unique([tenantId, name])
+}
+
+model ExpenseClaim {
+  id                String      @id @default(uuid()) @db.Uuid
+  tenantId          String      @db.Uuid
+  employeeId        String      @db.Uuid
+  categoryId        String      @db.Uuid
+  spentOn           DateTime    @db.Date
+  /// Whole rupees.
+  amount            Int
+  description       String
+  /// The receipt, kept in the employee's documents.
+  receiptDocumentId String?     @db.Uuid
+  status            ClaimStatus @default(PENDING)
+  requestedById     String?     @db.Uuid
+  decidedById       String?     @db.Uuid
+  decidedAt         DateTime?
+  decisionNote      String?
+  paidAt            DateTime?
+  createdAt         DateTime    @default(now())
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  category ClaimCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([tenantId, employeeId, spentOn])
+}
+
+enum PayrollStatus {
+  DRAFT
+  LOCKED
+  PAID
+}
+
+/// Someone's pay from a date. The newest one on or before a month is used for that month.
+model SalaryStructure {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  employeeId    String   @db.Uuid
+  annualCtc     Int
+  basicPercent  Int      @default(50)
+  metro         Boolean  @default(false)
+  effectiveFrom DateTime @db.Date
+  createdById   String?  @db.Uuid
+  createdAt     DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, effectiveFrom])
+  @@index([tenantId, employeeId])
+}
+
+/// One month's payroll. DRAFT can be recalculated; LOCKED is final for review; PAID closes it.
+model PayrollRun {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @db.Uuid
+  /// YYYY-MM
+  month     String
+  status    PayrollStatus @default(DRAFT)
+  gross     Int           @default(0)
+  net       Int           @default(0)
+  /// Employee and employer PF + ESI, PT and TDS.
+  statutory Int           @default(0)
+  ctc       Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  lockedAt  DateTime?
+  paidAt    DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payslips Payslip[]
+
+  @@unique([tenantId, month])
+}
+
+model Payslip {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  runId        String   @db.Uuid
+  employeeId   String   @db.Uuid
+  /// [{ key, label, amount, kind }]
+  lines        Json
+  gross        Int
+  deductions   Int
+  net          Int
+  pf           Int      @default(0)
+  esi          Int      @default(0)
+  pt           Int      @default(0)
+  tds          Int      @default(0)
+  employerPf   Int      @default(0)
+  employerEsi  Int      @default(0)
+  reimbursements Int    @default(0)
+  payableDays  Decimal  @db.Decimal(5, 1)
+  daysInMonth  Int
+  lopDays      Decimal  @default(0) @db.Decimal(5, 1)
+  overtimeHours Decimal @default(0) @db.Decimal(5, 1)
+  /// Statutory detail for returns and challans.
+  taxableIncome Int     @default(0)
+  annualTax     Int     @default(0)
+  regime        TaxRegime @default(NEW)
+  eps           Int     @default(0)
+  edli          Int     @default(0)
+  pfAdmin       Int     @default(0)
+  pfWages       Int     @default(0)
+  epsWages      Int     @default(0)
+  esiWages      Int     @default(0)
+  lwf           Int     @default(0)
+  employerLwf   Int     @default(0)
+  bonus         Int     @default(0)
+  /// The salary structure used, and arrears this payslip settled for earlier months.
+  salaryId      String? @db.Uuid
+  arrearsPaid   Json    @default("[]")
+  payItemIds    String[] @db.Uuid
+  encashmentIds String[] @db.Uuid
+  /// [{ tag, reason, tone }] things HR should check before locking.
+  flags        Json     @default("[]")
+  reviewed     Boolean  @default(false)
+  /// Claims and overtime this payslip pays, marked paid when the run is paid.
+  claimIds     String[] @db.Uuid
+  overtimeIds  String[] @db.Uuid
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, employeeId])
+  @@index([tenantId, employeeId])
+}
+
+/// A statutory return or payment marked done (PF ECR, ESI, PT, TDS…).
+model ComplianceFiling {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  key       String
+  period    String
+  reference String?
+  filedById String?  @db.Uuid
+  filedAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key, period])
+}
+
+enum GoalStatus {
+  ON_TRACK
+  AT_RISK
+  BEHIND
+  DONE
+}
+
+enum GoalScope {
+  COMPANY
+  TEAM
+  PERSONAL
+}
+
+enum ReviewStage {
+  SELF
+  MANAGER
+  CALIBRATION
+  SHARED
+}
+
+model Goal {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @db.Uuid
+  ownerId     String     @db.Uuid
+  title       String
+  description String?
+  scope       GoalScope  @default(PERSONAL)
+  dueDate     DateTime   @db.Date
+  progress    Int        @default(0)
+  status      GoalStatus @default(ON_TRACK)
+  createdById String?    @db.Uuid
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner  Employee @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scope])
+  @@index([tenantId, ownerId])
+}
+
+model ReviewCycle {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  closesOn  DateTime @db.Date
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  closedAt  DateTime?
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reviews Review[]
+
+  @@unique([tenantId, name])
+}
+
+/// One person's review in a cycle: their self review, then their manager's, then HR calibration.
+model Review {
+  id              String      @id @default(uuid()) @db.Uuid
+  tenantId        String      @db.Uuid
+  cycleId         String      @db.Uuid
+  employeeId      String      @db.Uuid
+  /// Their manager when the cycle started; HR writes it when there is none.
+  reviewerId      String?     @db.Uuid
+  stage           ReviewStage @default(SELF)
+  selfRating      Int?
+  selfComments    String?
+  managerRating   Int?
+  managerComments String?
+  finalRating     Int?
+  updatedAt       DateTime    @updatedAt
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cycle    ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  employee Employee    @relation("Reviewee", fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewer Employee?   @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@unique([cycleId, employeeId])
+  @@index([tenantId, reviewerId])
+}
+
+/// A thank-you from one colleague to another.
+model Kudos {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  fromId    String   @db.Uuid
+  toId      String   @db.Uuid
+  value     String
+  reason    String
+  createdAt DateTime @default(now())
+
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  post   Post?
+  from   Employee @relation("KudosFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to     Employee @relation("KudosTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
+enum CourseMode {
+  GOOGLE_MEET
+  ZOOM
+  TEAMS
+  IN_PERSON
+  SELF_PACED
+}
+
+/// A course the company runs. Mandatory courses enrol everyone in the audience.
+model Course {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @db.Uuid
+  title        String
+  description  String?
+  category     String
+  leadId       String?    @db.Uuid
+  /// Null means everyone; otherwise one department.
+  departmentId String?    @db.Uuid
+  mandatory    Boolean    @default(false)
+  seats        Int?
+  startsOn     DateTime   @db.Date
+  endsOn       DateTime   @db.Date
+  hours        Decimal    @default(1) @db.Decimal(6, 1)
+  mode         CourseMode @default(GOOGLE_MEET)
+  meetingLink  String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead        Employee?       @relation("CourseLead", fields: [leadId], references: [id], onDelete: SetNull)
+  department  Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  sessions    CourseSession[]
+  enrollments Enrollment[]
+
+  @@index([tenantId, startsOn])
+}
+
+model CourseSession {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @db.Uuid
+  courseId String   @db.Uuid
+  title    String
+  startsAt DateTime
+  minutes  Int      @default(60)
+  location String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startsAt])
+}
+
+model Enrollment {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  courseId    String    @db.Uuid
+  employeeId  String    @db.Uuid
+  progress    Int       @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, employeeId])
+  @@index([tenantId, employeeId])
+}
+
+enum PostKind {
+  UPDATE
+  WIN
+  ANNOUNCEMENT
+  KUDOS
+  EVENT
+}
+
+enum RsvpAnswer {
+  GOING
+  MAYBE
+  NOT_GOING
+}
+
+/// A post on the company feed. Kudos posts point at the Kudos row; event posts carry the event.
+model Post {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @db.Uuid
+  authorId      String    @db.Uuid
+  kind          PostKind  @default(UPDATE)
+  body          String
+  /// Null means everyone; otherwise one department.
+  departmentId  String?   @db.Uuid
+  kudosId       String?   @unique @db.Uuid
+  eventTitle    String?
+  eventStartsAt DateTime?
+  eventEndsAt   DateTime?
+  eventLocation String?
+  pinned        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  author     Employee       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  department Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  kudos      Kudos?         @relation(fields: [kudosId], references: [id], onDelete: Cascade)
+  reactions  PostReaction[]
+  comments   PostComment[]
+  rsvps      EventRsvp[]
+
+  @@index([tenantId, createdAt])
+}
+
+model PostReaction {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  postId     String   @db.Uuid
+  employeeId String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  post     Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, employeeId])
+}
+
+model PostComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  postId    String   @db.Uuid
+  authorId  String   @db.Uuid
+  body      String
+  createdAt DateTime @default(now())
+
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  post   Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author Employee @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+}
+
+model EventRsvp {
+  id         String     @id @default(uuid()) @db.Uuid
+  tenantId   String     @db.Uuid
+  postId     String     @db.Uuid
+  employeeId String     @db.Uuid
+  answer     RsvpAnswer
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  post     Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, employeeId])
+}
+
+/// A quick poll. Who voted is stored only to stop double votes; results are counts.
+model Poll {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  question    String
+  closesOn    DateTime @db.Date
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  options PollOption[]
+  votes   PollVote[]
+
+  @@index([tenantId, closesOn])
+}
+
+model PollOption {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  pollId   String @db.Uuid
+  label    String
+  position Int
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes  PollVote[]
+}
+
+model PollVote {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  pollId     String   @db.Uuid
+  optionId   String   @db.Uuid
+  employeeId String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  poll     Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, employeeId])
+}
+
+/// An anonymous pulse survey. Who took part and what was answered live in separate tables
+/// with no link between them, so an answer can't be traced back to a person.
+model PulseSurvey {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  closesOn  DateTime @db.Date
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  participants PulseParticipant[]
+  responses    PulseResponse[]
+}
+
+model PulseParticipant {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @db.Uuid
+  surveyId   String @db.Uuid
+  employeeId String @db.Uuid
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  survey   PulseSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  employee Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, employeeId])
+}
+
+model PulseResponse {
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @db.Uuid
+  surveyId       String  @db.Uuid
+  /// 0 to 10: how likely are you to recommend working here?
+  score          Int
+  recognised     Boolean
+  managerSupport Boolean
+  workloadFair   Boolean
+  comment        String?
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  survey PulseSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+}
+
+enum ConversationKind {
+  DIRECT
+  CHANNEL
+}
+
+/// A private conversation between people, or a public channel anyone in the workspace can join.
+model Conversation {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @db.Uuid
+  kind          ConversationKind @default(DIRECT)
+  subject       String
+  /// Channels only: lower-case name without the #, unique per workspace.
+  channelName   String?
+  description   String?
+  createdById   String?          @db.Uuid
+  lastMessageAt DateTime         @default(now())
+  createdAt     DateTime         @default(now())
+
+  tenant   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members  ConversationMember[]
+  messages Message[]
+
+  @@unique([tenantId, channelName])
+  @@index([tenantId, lastMessageAt])
+}
+
+model ConversationMember {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  conversationId String    @db.Uuid
+  employeeId     String    @db.Uuid
+  lastReadAt     DateTime?
+  starred        Boolean   @default(false)
+  joinedAt       DateTime  @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, employeeId])
+  @@index([tenantId, employeeId])
+}
+
+model Message {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  conversationId String   @db.Uuid
+  authorId       String   @db.Uuid
+  body           String
+  createdAt      DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author       Employee     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+/// Working hours and weekly offs. One shift per workspace is the default for anyone not assigned.
+model Shift {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  name           String
+  /// Local time in India, "09:30".
+  startTime      String
+  endTime        String
+  /// Check-ins up to this many minutes after the start are on time.
+  graceMinutes   Int      @default(15)
+  /// Minutes worked for a full day and for a half day.
+  fullDayMinutes Int      @default(480)
+  halfDayMinutes Int      @default(240)
+  /// Days of the week off: 0 Sunday to 6 Saturday.
+  weeklyOffs     Int[]    @default([0, 6])
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([tenantId, name])
+}
+
+/// A public holiday. With a location it applies only to people at that location.
+model Holiday {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  date       DateTime  @db.Date
+  name       String
+  /// Optional (restricted) holidays are listed but not days off.
+  optional   Boolean   @default(false)
+  locationId String?   @db.Uuid
+  createdAt  DateTime  @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, date, name])
+  @@index([tenantId, date])
+}
+
+enum RegularisationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// A request to fix a day's attendance: a missed punch or a wrong time.
+model AttendanceRegularisation {
+  id           String               @id @default(uuid()) @db.Uuid
+  tenantId     String               @db.Uuid
+  employeeId   String               @db.Uuid
+  date         DateTime             @db.Date
+  checkIn      DateTime?
+  checkOut     DateTime?
+  reason       String
+  status       RegularisationStatus @default(PENDING)
+  decidedById  String?              @db.Uuid
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime             @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([employeeId, date])
+}
+
+/// A fingerprint or face device that pushes punches. Devices using the ZKTeco/eSSL push
+/// protocol are known by serial number; others call the punch API with their key.
+model BiometricDevice {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  name         String
+  serialNumber String    @unique
+  locationId   String?   @db.Uuid
+  /// SHA-256 of the device's API key; the key itself is shown once.
+  keyHash      String?   @unique
+  keyPrefix    String?
+  active       Boolean   @default(true)
+  lastSeenAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  punches  Punch[]
+}
+
+enum PunchDirection {
+  IN
+  OUT
+  UNKNOWN
+}
+
+/// One raw punch from a device, kept as received. A punch whose device user isn't linked to an
+/// employee yet waits with no employee until HR links them.
+model Punch {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @db.Uuid
+  deviceId     String         @db.Uuid
+  deviceUserId String
+  employeeId   String?        @db.Uuid
+  punchedAt    DateTime
+  direction    PunchDirection @default(UNKNOWN)
+  createdAt    DateTime       @default(now())
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  device   BiometricDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  employee Employee?       @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@unique([deviceId, deviceUserId, punchedAt])
+  @@index([tenantId, employeeId, punchedAt])
+  @@index([tenantId, deviceUserId])
+}
+
+enum LeaveLedgerKind {
+  OPENING
+  ADJUSTMENT
+  CARRY_FORWARD
+  COMP_OFF
+  ENCASHED
+  LAPSED
+}
+
+/// Changes to a leave balance besides leave taken: opening balances, HR adjustments, carry
+/// forward, comp-off earned, and days encashed or lapsed at year end. Credits are positive,
+/// debits negative.
+model LeaveLedger {
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @db.Uuid
+  employeeId  String          @db.Uuid
+  leaveTypeId String          @db.Uuid
+  year        Int
+  days        Decimal         @db.Decimal(5, 1)
+  kind        LeaveLedgerKind
+  note        String?
+  /// Comp-off: the day worked. Year end: the last day of the year closed.
+  sourceDate  DateTime?       @db.Date
+  /// Comp-off credits expire.
+  expiresOn   DateTime?       @db.Date
+  /// Encashment: the payroll run that paid it.
+  paidInRunId String?         @db.Uuid
+  createdById String?         @db.Uuid
+  createdAt   DateTime        @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId, year])
+  @@index([employeeId, kind, sourceDate])
+}
+
+/// A leave year closed by HR: carry forward written, the rest lapsed or encashed.
+model LeaveYearClose {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  year        Int
+  encashed    Boolean  @default(false)
+  summary     Json     @default("{}")
+  closedById  String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, year])
+}
+
+enum AttendanceMonthStatus {
+  OPEN
+  CLOSED
+}
+
+/// A month's attendance, closed by HR before payroll so the register and payslips agree.
+model AttendanceMonth {
+  id         String                @id @default(uuid()) @db.Uuid
+  tenantId   String                @db.Uuid
+  /// YYYY-MM
+  month      String
+  status     AttendanceMonthStatus @default(OPEN)
+  closedAt   DateTime?
+  closedById String?               @db.Uuid
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, month])
+}
+
+/// A company policy HR has changed, stored as only the changed values (see packages/shared/src/policies.ts).
+model Policy {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  key         String
+  data        Json     @default("{}")
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+}
+
+enum TaxRegime {
+  NEW
+  OLD
+}
+
+/// Form 12BB declaration for a financial year (April of fyStart to March).
+model TaxDeclaration {
+  id                     String    @id @default(uuid()) @db.Uuid
+  tenantId               String    @db.Uuid
+  employeeId             String    @db.Uuid
+  fyStart                Int
+  regime                 TaxRegime @default(NEW)
+  rentMonthly            Int       @default(0)
+  landlordPan            String?
+  sec80C                 Int       @default(0)
+  sec80D                 Int       @default(0)
+  sec80DParents          Int       @default(0)
+  parentsSenior          Boolean   @default(false)
+  sec80CCD1B             Int       @default(0)
+  homeLoanInterest       Int       @default(0)
+  otherDeductions        Int       @default(0)
+  previousEmployerIncome Int       @default(0)
+  previousEmployerTds    Int       @default(0)
+  /// HR has seen the proofs.
+  verified               Boolean   @default(false)
+  updatedById            String?   @db.Uuid
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, fyStart])
+  @@index([tenantId, fyStart])
+}
+
+enum PayItemKind {
+  BONUS
+  INCENTIVE
+  ARREARS
+  OTHER_EARNING
+  ADVANCE_RECOVERY
+  LOAN_RECOVERY
+  OTHER_DEDUCTION
+  LEAVE_ENCASHMENT
+  GRATUITY
+  NOTICE_PAY
+  NOTICE_RECOVERY
+}
+
+/// A one-off amount on someone's payslip for a month: bonus, arrears, recoveries, settlement items.
+model PayItem {
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @db.Uuid
+  employeeId   String      @db.Uuid
+  /// YYYY-MM
+  month        String
+  kind         PayItemKind
+  label        String
+  amount       Int
+  taxable      Boolean     @default(true)
+  exempt       Int         @default(0)
+  /// Part that counts as PF wages (Basic arrears).
+  pfWages      Int         @default(0)
+  esiWages     Boolean     @default(true)
+  note         String?
+  settlementId String?     @db.Uuid
+  createdById  String?     @db.Uuid
+  createdAt    DateTime    @default(now())
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, month])
+  @@index([employeeId, month])
+}
+
+enum SettlementStatus {
+  DRAFT
+  FINAL
+}
+
+/// Full and final settlement for someone leaving.
+model Settlement {
+  id             String           @id @default(uuid()) @db.Uuid
+  tenantId       String           @db.Uuid
+  employeeId     String           @db.Uuid
+  lastWorkingDay DateTime         @db.Date
+  status         SettlementStatus @default(DRAFT)
+  /// Inputs and the worked figures, kept as calculated.
+  data           Json             @default("{}")
+  createdById    String?          @db.Uuid
+  createdAt      DateTime         @default(now())
+  finalisedAt    DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  items    PayItem[]
+
+  @@unique([employeeId])
+}
+
+enum AuthTokenKind {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+  MFA_CHALLENGE
+}
+
+/// Single-use tokens sent by email (verify, reset) or held during a two-step sign-in.
+/// Only a SHA-256 hash is stored.
+model AuthToken {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @db.Uuid
+  userId    String        @db.Uuid
+  kind      AuthTokenKind
+  tokenHash String        @unique
+  /// Two-step sign-in: whether to keep the session after the code is entered.
+  persistent Boolean      @default(true)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+}
+
+/// One-time recovery codes for two-step sign-in, stored hashed.
+model RecoveryCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  userId    String    @db.Uuid
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// A Google or Microsoft account linked to a login, matched by the provider's stable subject.
+model ExternalIdentity {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  userId    String   @db.Uuid
+  provider  String
+  subject   String
+  email     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider, subject])
+  @@index([userId])
+}
+
+/// Every email the app sends. The body is kept only for the development "log" sender, so
+/// production rows never hold reset links.
+model OutboxEmail {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String?  @db.Uuid
+  to        String
+  subject   String
+  text      String?
+  provider  String
+  status    String
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

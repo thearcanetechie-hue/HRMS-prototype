@@ -1,7 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Icon } from '@/components/icon';
+import { Check, Send } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogClose, DialogContent, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { api, ApiError, Employee } from '@/lib/api';
 
 /**
@@ -21,8 +25,8 @@ export function InviteButton({
   const [busy, setBusy] = useState(false);
   const status = employee.user?.status;
 
-  if (status === 'ACTIVE') return <span className="pill good">Can sign in</span>;
-  if (employee.status === 'EXITED') return <span className="muted">–</span>;
+  if (status === 'ACTIVE') return <Badge tone="success">Can sign in</Badge>;
+  if (employee.status === 'EXITED') return <span className="text-muted-foreground">–</span>;
 
   async function invite() {
     setBusy(true);
@@ -45,61 +49,45 @@ export function InviteButton({
 
   return (
     <>
-      <button className="btn btn-sm" onClick={invite} disabled={busy}>
-        <Icon name="send" size={14} /> {status === 'INVITED' ? 'Resend invite' : 'Invite'}
-      </button>
-      {error && <div className="err">{error}</div>}
-      {link && (
-        <div
-          className="scrim"
-          style={{ alignItems: 'center', justifyContent: 'center' }}
-          onClick={(e) => e.target === e.currentTarget && setLink(null)}
-        >
-          <div
-            className="card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="invite-title"
-            style={{ width: 'min(520px, calc(100vw - 32px))' }}
-          >
-            <div className="card-h">
-              <h3 id="invite-title">Invite link for {employee.firstName}</h3>
-              <button className="btn icon-btn" aria-label="Close" onClick={() => setLink(null)}>
-                <Icon name="x" />
-              </button>
-            </div>
-            <p className="muted" style={{ marginTop: 0 }}>
+      <Button size="sm" onClick={invite} disabled={busy}>
+        <Send /> {status === 'INVITED' ? 'Resend invite' : 'Invite'}
+      </Button>
+      {error && <p className="mt-1 text-xs font-semibold text-danger">{error}</p>}
+      <Dialog open={Boolean(link)} onOpenChange={(open) => !open && setLink(null)}>
+        {link && (
+          <DialogContent title={`Invite link for ${employee.firstName}`}>
+            <DialogDescription className="mb-4 text-muted-foreground">
               Send this link to {employee.workEmail}. It works once and expires on{' '}
               {new Date(link.expiresAt).toLocaleDateString('en-IN', {
                 day: 'numeric',
                 month: 'short',
               })}
               . Any earlier link for them no longer works.
-            </p>
-            <input
-              className="input num"
+            </DialogDescription>
+            <Input
+              className="font-mono text-[13px]"
               readOnly
               value={link.url}
               onFocus={(e) => e.currentTarget.select()}
               aria-label="Invite link"
             />
-            <div className="actions" style={{ marginTop: 14 }}>
-              <button
-                className="btn btn-primary"
+            <div className="mt-5 flex gap-3">
+              <Button
+                variant="primary"
                 onClick={async () => {
                   await navigator.clipboard.writeText(link.url).catch(() => undefined);
                   setCopied(true);
                 }}
               >
-                <Icon name="check" size={16} /> {copied ? 'Copied' : 'Copy link'}
-              </button>
-              <button className="btn" onClick={() => setLink(null)}>
-                Done
-              </button>
+                <Check /> {copied ? 'Copied' : 'Copy link'}
+              </Button>
+              <DialogClose asChild>
+                <Button>Done</Button>
+              </DialogClose>
             </div>
-          </div>
-        </div>
-      )}
+          </DialogContent>
+        )}
+      </Dialog>
     </>
   );
 }

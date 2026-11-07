@@ -1,274 +1,416 @@
 'use client';
 
-import { createEmployeeSchema, EMPLOYMENT_TYPES } from '@hrms/shared';
-import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Field } from '@/components/auth-layout';
+import { Download, Filter, Upload, UserPlus } from 'lucide-react';
 import Link from 'next/link';
-import { Icon } from '@/components/icon';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { ActivityFeed } from '@/components/activity-log';
+import { AddEmployee } from '@/components/add-employee';
 import { InviteButton } from '@/components/invite-button';
+import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { SearchField } from '@/components/ui/bits';
+import { Button } from '@/components/ui/button';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Chip } from '@/components/ui/chip';
+import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
+import { Field, Select } from '@/components/ui/input';
+import { Banner, Empty, PageHeader } from '@/components/ui/page';
+import { Skeleton } from '@/components/ui/progress';
+import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api, ApiError, Employee, Named, Paged } from '@/lib/api';
-import { formatDate, initials, STATUS_PILL, titleCase as label } from '@/lib/format';
-import { FieldErrors, firstErrors, validate } from '@/lib/forms';
+import type { AttendanceRegister } from '@/lib/api';
+import { initials, STATUS_TONE, titleCase } from '@/lib/format';
 import { useSession } from '@/lib/session';
+import { cn } from '@/lib/utils';
+
+const PAGE_SIZE = 9;
+const STATUSES = ['ACTIVE', 'ONBOARDING', 'ON_NOTICE', 'EXITED'] as const;
+type Status = (typeof STATUSES)[number];
 
 export default function EmployeesPage() {
+  // useSearchParams needs a Suspense boundary in the app router.
+  return (
+    <Suspense>
+      <Employees />
+    </Suspense>
+  );
+}
+
+function Employees() {
   const { can } = useSession();
-  // People without employee.read get the directory: no joining date, status or access columns.
+  const router = useRouter();
+  const params = useSearchParams();
   const full = can('employee.read');
   const manage = can('employee.manage');
+
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<Status | ''>('');
+  const [departmentId, setDepartmentId] = useState('');
+  const [page, setPage] = useState(1);
   const [data, setData] = useState<Paged<Employee> | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [departments, setDepartments] = useState<Named[]>([]);
+  const [today, setToday] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(params.get('add') === '1');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const q = new URLSearchParams({ pageSize: '100', ...(search ? { search } : {}) });
+      const q = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+        ...(search ? { search } : {}),
+        ...(status ? { status } : {}),
+        ...(departmentId ? { departmentId } : {}),
+      });
       setData(await api<Paged<Employee>>(`/employees?${q}`));
       setError('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load employees.');
     }
-  }, [search]);
+  }, [search, status, departmentId, page]);
+
+  const loadCounts = useCallback(() => {
+    if (!full) return;
+    const count = (s = '') =>
+      api<Paged<Employee>>(`/employees?pageSize=1${s && `&status=${s}`}`).then(
+        (r) => [s || 'ALL', r.total] as const,
+      );
+    Promise.all([count(), ...STATUSES.map(count)])
+      .then((pairs) => setCounts(Object.fromEntries(pairs)))
+      .catch(() => undefined);
+  }, [full]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load]);
+  useEffect(loadCounts, [loadCounts]);
+  useEffect(() => {
+    api<Named[]>('/org/departments')
+      .then(setDepartments)
+      .catch(() => undefined);
+    if (full)
+      api<AttendanceRegister>(`/attendance/register?month=${new Date().toISOString().slice(0, 7)}`)
+        .then((r) => {
+          const i = r.days.indexOf(r.today);
+          const names = new Map(r.leaveTypes.map((t) => [t.code, t.name]));
+          const label = (c?: { code: string; late?: boolean }) =>
+            !c || !c.code
+              ? '–'
+              : c.code === 'W'
+                ? 'Weekend'
+                : c.code === 'P'
+                  ? c.late
+                    ? 'In · late'
+                    : 'In'
+                  : c.code === 'A'
+                    ? 'Absent'
+                    : c.code === 'HD'
+                      ? 'Half day'
+                      : (names.get(c.code) ?? c.code);
+          setToday(Object.fromEntries(r.rows.map((row) => [row.employee.id, label(row.cells[i])])));
+        })
+        .catch(() => undefined);
+  }, [full]);
+
+  const filterCount = [status, departmentId].filter(Boolean).length;
+  const clearFilters = () => {
+    setStatus('');
+    setDepartmentId('');
+    setSearch('');
+    setPage(1);
+  };
+  const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  const from = data && data.total ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const to = data ? Math.min(page * PAGE_SIZE, data.total) : 0;
+
+  const directory = (
+    <div className="grid min-w-0 content-start gap-4">
+      {full && (
+        <div className="flex flex-wrap gap-2.5">
+          {(['', ...STATUSES] as const).map((s) => (
+            <Chip
+              key={s || 'ALL'}
+              active={status === s}
+              onClick={() => {
+                setStatus(s);
+                setPage(1);
+              }}
+            >
+              {s ? titleCase(s) : 'All'}
+              {counts[s || 'ALL'] != null && (
+                <span className="font-mono text-xs opacity-80">{counts[s || 'ALL']}</span>
+              )}
+            </Chip>
+          ))}
+        </div>
+      )}
+      {error && <Banner>{error}</Banner>}
+      <Table>
+        <THead>
+          <tr>
+            <TH>Employee</TH>
+            <TH>Code</TH>
+            <TH>Team</TH>
+            <TH>Location</TH>
+            {full && <TH>Status</TH>}
+            {full && <TH className="text-right">Today</TH>}
+            {manage && <TH>Access</TH>}
+          </tr>
+        </THead>
+        <TBody>
+          {!data &&
+            [0, 1, 2, 3].map((i) => (
+              <TR key={i}>
+                <TD colSpan={7}>
+                  <Skeleton className="h-9" />
+                </TD>
+              </TR>
+            ))}
+          {data?.items.map((e) => (
+            <TR
+              key={e.id}
+              className="cursor-pointer"
+              onClick={(ev) => {
+                if (!(ev.target as HTMLElement).closest('a,button'))
+                  router.push(`/employees/${e.id}`);
+              }}
+            >
+              <TD>
+                <Link
+                  href={`/employees/${e.id}`}
+                  className="group flex min-w-52 items-center gap-3 text-inherit no-underline"
+                >
+                  <Avatar size="sm" initials={initials(e.firstName, e.lastName)} />
+                  <div className="min-w-0">
+                    <div className="font-bold whitespace-nowrap group-hover:text-primary">
+                      {e.firstName} {e.lastName}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {e.designation?.name ?? e.workEmail}
+                    </div>
+                  </div>
+                </Link>
+              </TD>
+              <TD className="font-mono text-[13px] whitespace-nowrap">{e.employeeCode}</TD>
+              <TD>{e.department?.name ?? '–'}</TD>
+              <TD>{e.location?.name ?? '–'}</TD>
+              {full && (
+                <TD>
+                  {e.status && (
+                    <Badge tone={e.status === 'EXITED' ? 'neutral' : STATUS_TONE[e.status]}>
+                      {titleCase(e.status)}
+                    </Badge>
+                  )}
+                </TD>
+              )}
+              {full && (
+                <TD className="text-right whitespace-nowrap text-muted-foreground">
+                  {e.status === 'EXITED' ? 'Left' : (today[e.id] ?? '–')}
+                </TD>
+              )}
+              {manage && (
+                <TD>
+                  <InviteButton employee={e} onInvited={() => void load()} />
+                </TD>
+              )}
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+      {data && data.items.length === 0 && (
+        <div className="grid justify-items-center gap-3">
+          <TableEmpty>No one matches these filters</TableEmpty>
+          <Button size="sm" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        </div>
+      )}
+      {data && data.total > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-muted-foreground">
+          <span>
+            Showing {from}–{to} of {data.total}
+          </span>
+          <nav aria-label="Pages" className="flex gap-1.5">
+            {Array.from({ length: Math.min(pages, 7) }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                type="button"
+                aria-current={p === page ? 'page' : undefined}
+                onClick={() => setPage(p)}
+                className={cn(
+                  'grid size-8 cursor-pointer place-items-center rounded-[10px] font-bold tabular',
+                  p === page
+                    ? 'bg-primary text-primary-foreground shadow-glow'
+                    : 'bg-surface text-foreground shadow-raised-sm',
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
-      <div className="page-h">
-        <div>
-          <h1>{full ? 'Employees' : 'Directory'}</h1>
-          <p>{data ? `${data.total} ${data.total === 1 ? 'person' : 'people'}` : 'Loading…'}</p>
-        </div>
-        <div className="actions">
-          <div className="search" style={{ display: 'block', minWidth: 240 }}>
-            <Icon name="search" size={16} />
-            <input
-              className="input"
-              placeholder="Search name, email or code"
+      <PageHeader
+        eyebrow="People"
+        title={full ? 'Employees' : 'Directory'}
+        description={
+          counts.ALL != null
+            ? `${counts.ALL} ${counts.ALL === 1 ? 'person' : 'people'} across ${departments.length} teams.`
+            : data
+              ? `${data.total} people`
+              : 'Loading…'
+        }
+        actions={
+          manage && (
+            <>
+              <Button asChild>
+                <Link href="/onboarding/team">
+                  <Upload /> Import
+                </Link>
+              </Button>
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                <UserPlus /> Add employee
+              </Button>
+            </>
+          )
+        }
+      />
+
+      <Tabs defaultValue="directory" className="grid gap-5">
+        <div className="flex flex-wrap items-center gap-3">
+          {full ? (
+            <TabsList>
+              <TabsTrigger value="directory">Directory</TabsTrigger>
+              <TabsTrigger value="log">Activity log</TabsTrigger>
+              <TabsTrigger value="org">Org chart</TabsTrigger>
+            </TabsList>
+          ) : null}
+          <div className="ml-auto flex w-full gap-3 sm:w-auto">
+            <SearchField
+              className="sm:w-[280px]"
+              placeholder="Name, code or email"
               aria-label="Search employees"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
             />
+            <Button className="h-11" onClick={() => setFiltersOpen(true)}>
+              <Filter /> Filters{filterCount ? ` · ${filterCount}` : ''}
+            </Button>
           </div>
-          {can('employee.manage') && (
-            <button className="btn btn-primary" onClick={() => setAdding(true)}>
-              <Icon name="plus" size={16} /> Add employee
-            </button>
+        </div>
+
+        <TabsContent value="directory">
+          {full ? (
+            <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+              {directory}
+              <Card className="content-start">
+                <CardHeader>
+                  <div>
+                    <CardTitle>Employee log</CardTitle>
+                    <CardDescription>Every change, in order</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="sm" disabled title="Coming soon">
+                    <Download /> Export
+                  </Button>
+                </CardHeader>
+                <ActivityFeed take={12} />
+              </Card>
+            </div>
+          ) : (
+            directory
           )}
-        </div>
-      </div>
-      {error && (
-        <div className="banner" style={{ marginBottom: 14 }}>
-          {error}
-        </div>
-      )}
-      <div className="card" style={{ padding: 0 }}>
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Code</th>
-                <th>Department</th>
-                <th>Designation</th>
-                <th>Location</th>
-                {full && <th>Joined</th>}
-                {full && <th>Status</th>}
-                {manage && <th>Access</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {data?.items.map((e) => (
-                <tr key={e.id}>
-                  <td>
-                    <Link
-                      href={`/employees/${e.id}`}
-                      className="who"
-                      style={{ color: 'inherit', textDecoration: 'none' }}
-                    >
-                      <div className="avatar sm alt">{initials(e.firstName, e.lastName)}</div>
-                      <div>
-                        <div className="n">
-                          {e.firstName} {e.lastName}
-                        </div>
-                        <div className="e">{e.workEmail}</div>
-                      </div>
-                    </Link>
-                  </td>
-                  <td className="num">{e.employeeCode}</td>
-                  <td>{e.department?.name ?? '–'}</td>
-                  <td>{e.designation?.name ?? '–'}</td>
-                  <td>{e.location?.name ?? '–'}</td>
-                  {full && (
-                    <td className="num">{e.dateOfJoining ? formatDate(e.dateOfJoining) : '–'}</td>
-                  )}
-                  {full && (
-                    <td>
-                      {e.status && (
-                        <span className={`pill ${STATUS_PILL[e.status]}`}>{label(e.status)}</span>
-                      )}
-                    </td>
-                  )}
-                  {manage && (
-                    <td>
-                      <InviteButton employee={e} onInvited={() => void load()} />
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {data && data.items.length === 0 && (
-            <div className="empty">No one matches that search.</div>
-          )}
-        </div>
-      </div>
-      {adding && (
-        <AddEmployee
-          onClose={() => setAdding(false)}
-          onCreated={() => {
-            setAdding(false);
-            void load();
-          }}
-        />
-      )}
+        </TabsContent>
+        <TabsContent value="log">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Activity log</CardTitle>
+                <CardDescription>Every change, in order</CardDescription>
+              </div>
+            </CardHeader>
+            <ActivityFeed take={100} />
+          </Card>
+        </TabsContent>
+        <TabsContent value="org">
+          <Card>
+            <Empty>The org chart is coming soon.</Empty>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <DialogContent title="Filters" side="right" aria-describedby={undefined}>
+          <div className="grid gap-4">
+            <Field id="f-team" label="Team">
+              <Select
+                id="f-team"
+                value={departmentId}
+                onChange={(e) => {
+                  setDepartmentId(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All teams</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {full && (
+              <Field id="f-status" label="Status">
+                <Select
+                  id="f-status"
+                  value={status}
+                  onChange={(e) => {
+                    setStatus(e.target.value as Status | '');
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Any status</option>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {titleCase(s)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            <div className="flex gap-3">
+              <DialogClose asChild>
+                <Button variant="primary">Show results</Button>
+              </DialogClose>
+              <Button onClick={clearFilters}>Clear</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={adding} onOpenChange={setAdding}>
+        {adding && (
+          <AddEmployee
+            onCreated={() => {
+              setAdding(false);
+              void load();
+              loadCounts();
+            }}
+          />
+        )}
+      </Dialog>
     </>
-  );
-}
-
-function AddEmployee({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [formError, setFormError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [options, setOptions] = useState<{
-    departments: Named[];
-    designations: Named[];
-    locations: Named[];
-  }>({
-    departments: [],
-    designations: [],
-    locations: [],
-  });
-
-  useEffect(() => {
-    Promise.all([
-      api<Named[]>('/org/departments'),
-      api<Named[]>('/org/designations'),
-      api<Named[]>('/org/locations'),
-    ])
-      .then(([departments, designations, locations]) =>
-        setOptions({ departments, designations, locations }),
-      )
-      .catch(() => undefined);
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setFormError('');
-    const raw = Object.fromEntries(
-      [...new FormData(e.currentTarget)].map(([k, v]) => [k, v === '' ? undefined : v]),
-    );
-    const { data, errors } = validate(createEmployeeSchema, raw);
-    setErrors(errors ?? {});
-    if (!data) return;
-    setBusy(true);
-    try {
-      await api('/employees', { method: 'POST', body: JSON.stringify(data) });
-      onCreated();
-    } catch (err) {
-      if (err instanceof ApiError && Object.keys(err.fieldErrors).length)
-        setErrors(firstErrors(err.fieldErrors));
-      else setFormError(err instanceof ApiError ? err.message : 'Could not save.');
-      setBusy(false);
-    }
-  }
-
-  const select = (name: string, items: Named[]) => (
-    <select className="input" id={name} name={name} defaultValue="">
-      <option value="">Not set</option>
-      {items.map((i) => (
-        <option key={i.id} value={i.id}>
-          {i.name}
-        </option>
-      ))}
-    </select>
-  );
-
-  return (
-    <div className="scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="add-title">
-        <div className="card-h">
-          <h3 id="add-title">Add employee</h3>
-          <button className="btn icon-btn" aria-label="Close" onClick={onClose}>
-            <Icon name="x" />
-          </button>
-        </div>
-        <form onSubmit={onSubmit} noValidate className="form-grid">
-          <Field id="firstName" label="First name" error={errors.firstName}>
-            <input className="input" id="firstName" name="firstName" required />
-          </Field>
-          <Field id="lastName" label="Last name" error={errors.lastName}>
-            <input className="input" id="lastName" name="lastName" />
-          </Field>
-          <div className="full">
-            <Field id="workEmail" label="Work email" error={errors.workEmail}>
-              <input className="input" id="workEmail" name="workEmail" type="email" required />
-            </Field>
-          </div>
-          <Field id="employeeCode" label="Employee code" error={errors.employeeCode}>
-            <input className="input" id="employeeCode" name="employeeCode" required />
-          </Field>
-          <Field id="dateOfJoining" label="Date of joining" error={errors.dateOfJoining}>
-            <input className="input" id="dateOfJoining" name="dateOfJoining" type="date" required />
-          </Field>
-          <Field id="phone" label="Phone" error={errors.phone}>
-            <input className="input" id="phone" name="phone" type="tel" />
-          </Field>
-          <Field id="employmentType" label="Employment type" error={errors.employmentType}>
-            <select
-              className="input"
-              id="employmentType"
-              name="employmentType"
-              defaultValue="FULL_TIME"
-            >
-              {EMPLOYMENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {label(t)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field id="departmentId" label="Department" error={errors.departmentId}>
-            {select('departmentId', options.departments)}
-          </Field>
-          <Field id="designationId" label="Designation" error={errors.designationId}>
-            {select('designationId', options.designations)}
-          </Field>
-          <div className="full">
-            <Field id="locationId" label="Location" error={errors.locationId}>
-              {select('locationId', options.locations)}
-            </Field>
-          </div>
-          <div className="err full" role="alert">
-            {formError}
-          </div>
-          <div className="actions full">
-            <button className="btn btn-primary" type="submit" disabled={busy}>
-              {busy ? 'Saving…' : 'Add employee'}
-            </button>
-            <button className="btn" type="button" onClick={onClose}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      </aside>
-    </div>
   );
 }

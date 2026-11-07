@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AcceptInviteInput } from '@hrms/shared';
+import { passwordProblem } from '@hrms/shared';
+import { requestContext } from '../common/request-context';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
@@ -106,6 +108,13 @@ export class InvitationsService {
   /** Public: sets the password, activates the login and signs the person in. */
   async accept(input: AcceptInviteInput, client: ClientInfo) {
     const invitation = await this.findUsable(input.token);
+    const problem = passwordProblem(input.password, {
+      email: invitation.user.email,
+      name: invitation.user.fullName,
+      workspace: invitation.user.tenant.slug,
+      company: invitation.user.tenant.name,
+    });
+    if (problem) throw new BadRequestException(problem);
     const passwordHash = await argon2.hash(input.password, { type: argon2.argon2id });
     await this.prisma.$transaction(async (tx) => {
       // Conditional update so a link can only ever be used once, even under concurrent requests.
@@ -116,7 +125,14 @@ export class InvitationsService {
       if (count === 0) throw new GoneException('This invite link has already been used');
       await tx.user.update({
         where: { id: invitation.userId },
-        data: { passwordHash, status: 'ACTIVE', lastLoginAt: new Date() },
+        // Following the emailed link proves the address, so it counts as verified.
+        data: {
+          passwordHash,
+          status: 'ACTIVE',
+          lastLoginAt: new Date(),
+          passwordChangedAt: new Date(),
+          emailVerifiedAt: new Date(),
+        },
       });
       await tx.auditLog.create({
         data: {
@@ -129,7 +145,11 @@ export class InvitationsService {
         },
       });
     });
-    return this.auth.issueTokens(invitation.userId, invitation.tenantId, client);
+    const store = requestContext.getStore();
+    if (store) store.tenantId = invitation.tenantId;
+    return this.auth.issueTokens(invitation.userId, invitation.tenantId, client, {
+      persistent: true,
+    });
   }
 
   private async findUsable(token: string) {
