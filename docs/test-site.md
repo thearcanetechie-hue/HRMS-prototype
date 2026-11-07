@@ -2,11 +2,11 @@
 
 A hosted copy for trying the app from anywhere. It uses `render.yaml` at the repo root:
 
-| Piece | Render service | Plan |
-|---|---|---|
-| Database | `hrms-test-db` (PostgreSQL, Singapore) | basic-256mb |
-| API | `hrms-test-api` (Node, Singapore, 1 GB disk for documents) | starter |
-| Website | `hrms-test-web` (Node, Singapore) | free (sleeps when idle; first visit takes ~1 minute) |
+| Piece    | Render service                                             | Plan                                                 |
+| -------- | ---------------------------------------------------------- | ---------------------------------------------------- |
+| Database | `hrms-test-db` (PostgreSQL, Singapore)                     | basic-256mb                                          |
+| API      | `hrms-test-api` (Node, Singapore, 1 GB disk for documents) | starter                                              |
+| Website  | `hrms-test-web` (Node, Singapore)                          | free (sleeps when idle; first visit takes ~1 minute) |
 
 Singapore is Render's closest region to India. Move to an Indian region (for example AWS Mumbai)
 before real employee data goes in, so personal data stays in India.
