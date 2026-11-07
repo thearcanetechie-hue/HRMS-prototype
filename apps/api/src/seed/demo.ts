@@ -3,12 +3,13 @@
  *   workspace: demo, password DemoPass123 for every login:
  *   owner@demo.test (Owner), vikram@demo.test (Manager), priya@demo.test (Employee)
  * Needs DATA_ENCRYPTION_KEY to encrypt the sample PAN and bank details.
- * Safe to run more than once.
+ * Safe to run more than once. Locally: `pnpm --filter @hrms/api prisma db seed`. The production
+ * image runs the compiled copy (dist/seed/demo.js) on boot when SEED_DEMO=true.
  */
 import { PrismaClient } from '@prisma/client';
 import { SYSTEM_ROLES, SystemRoleKey } from '@hrms/shared';
 import * as argon2 from 'argon2';
-import { FieldCrypto } from '../src/crypto/field-crypto';
+import { FieldCrypto } from '../crypto/field-crypto';
 
 const prisma = new PrismaClient();
 

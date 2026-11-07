@@ -23,5 +23,6 @@ USER node
 EXPOSE 4000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s \
   CMD node -e "fetch('http://localhost:'+(process.env.API_PORT||4000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-# Apply pending migrations, then start. Safe to run on every boot.
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/main.js"]
+# Apply pending migrations (and, with SEED_DEMO=true, add the demo workspace if it's
+# missing), then start. Safe to run on every boot.
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && if [ \"$SEED_DEMO\" = true ]; then node dist/seed/demo.js; fi && node dist/main.js"]

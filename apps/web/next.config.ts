@@ -2,7 +2,9 @@ import type { NextConfig } from 'next';
 import path from 'node:path';
 
 // Read at build time: rewrites are baked into the build, so Docker passes it as a build arg.
-const apiUrl = process.env.API_INTERNAL_URL ?? 'http://localhost:4000';
+// A bare host:port (what Render's private network hands out) gets http:// added.
+const rawApiUrl = process.env.API_INTERNAL_URL || 'http://localhost:4000';
+const apiUrl = /^https?:\/\//.test(rawApiUrl) ? rawApiUrl : `http://${rawApiUrl}`;
 
 const nextConfig: NextConfig = {
   output: 'standalone',
