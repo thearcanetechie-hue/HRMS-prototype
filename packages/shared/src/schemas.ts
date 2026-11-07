@@ -961,3 +961,33 @@ export const mfaDisableSchema = z.object({
   password: z.string().min(1).max(128),
   code: z.string().trim().min(6).max(20),
 });
+
+// ---------- Analytics ----------
+
+export const REPORT_KEYS = [
+  'headcount',
+  'attrition',
+  'leave',
+  'attendance',
+  'overtime',
+  'claims',
+  'payroll',
+  'diversity',
+  'learning',
+] as const;
+export type ReportKey = (typeof REPORT_KEYS)[number];
+/** The last 12 months, the last 3, or the Indian financial year (April onwards) so far. */
+export const REPORT_RANGES = ['12m', 'q', 'fy'] as const;
+export type ReportRange = (typeof REPORT_RANGES)[number];
+
+export const reportQuerySchema = z.object({ range: z.enum(REPORT_RANGES).default('12m') });
+export const askReportSchema = z.object({
+  question: z.string().trim().min(2).max(300),
+  range: z.enum(REPORT_RANGES).default('12m'),
+});
+export const savedReportSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  reportKey: z.enum(REPORT_KEYS),
+  range: z.enum(REPORT_RANGES).default('12m'),
+});
+export type SavedReportInput = z.infer<typeof savedReportSchema>;

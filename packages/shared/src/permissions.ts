@@ -27,6 +27,8 @@ export const PERMISSIONS = {
   'learning.manage': "Create courses, enrol people and see everyone's progress",
   'engagement.manage':
     'Post announcements and events, pin or remove posts, and run polls and pulse surveys',
+  'analytics.read':
+    'See company-wide reports: headcount, attrition, leave, attendance, overtime, claims, diversity and learning',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -65,6 +67,7 @@ export const SYSTEM_ROLES: Record<
       'performance.manage',
       'learning.manage',
       'engagement.manage',
+      'analytics.read',
       'audit.read',
     ],
   },
