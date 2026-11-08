@@ -1,16 +1,36 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { currentContext, requireTenantId } from '../common/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 
+export interface RecordedAction {
+  id: string;
+  tenantId: string;
+  actorId: string | null;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  data: Record<string, unknown>;
+  at: Date;
+}
+type Listener = (a: RecordedAction) => Promise<void>;
+
 @Injectable()
 export class AuditService {
+  private readonly logger = new Logger(AuditService.name);
+  private readonly listeners: Listener[] = [];
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Runs after every recorded action, in the same request (integrations send events this way). */
+  onRecord(listener: Listener) {
+    this.listeners.push(listener);
+  }
 
   /** Records an action by the current user in the current workspace. */
   async record(action: string, entity: string, entityId?: string | null, data?: unknown) {
     const ctx = currentContext();
-    await this.prisma.db.auditLog.create({
+    const row = await this.prisma.db.auditLog.create({
       data: {
         tenantId: requireTenantId(),
         actorId: ctx.userId ?? null,
@@ -21,6 +41,38 @@ export class AuditService {
         ip: ctx.ip ?? null,
       },
     });
+    for (const listener of this.listeners) {
+      // A listener's failure must never undo or fail the action itself.
+      await listener({
+        id: row.id,
+        tenantId: row.tenantId,
+        actorId: row.actorId,
+        action,
+        entity,
+        entityId: row.entityId,
+        data: (data ?? {}) as Record<string, unknown>,
+        at: row.createdAt,
+      }).catch((err: unknown) => this.logger.error(`Audit listener failed for ${action}`, err));
+    }
+  }
+
+  /** The plain-words line for one action, naming the actor and the person it was about. */
+  async describe(a: RecordedAction) {
+    const subject =
+      a.entity === 'Employee' ? a.entityId : ((a.data.employeeId as string | undefined) ?? null);
+    const [actor, employee] = await Promise.all([
+      a.actorId
+        ? this.prisma.db.user.findUnique({ where: { id: a.actorId }, select: { fullName: true } })
+        : null,
+      subject
+        ? this.prisma.db.employee.findUnique({
+            where: { id: subject },
+            select: { firstName: true, lastName: true },
+          })
+        : null,
+    ]);
+    const who = employee ? `${employee.firstName} ${employee.lastName}`.trim() : null;
+    return describe(a.action, actor?.fullName ?? 'Someone', who, a.data);
   }
 
   /**

@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { isPermission, Permission } from '@hrms/shared';
 import type { Request } from 'express';
 import { requestContext } from '../common/request-context';
+import { API_KEY_PREFIX, hashApiKey } from '../integrations/api-keys.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ANY_PERMISSIONS_KEY, AuthUser, IS_PUBLIC, PERMISSIONS_KEY } from './decorators';
 
@@ -42,10 +43,29 @@ export class AuthGuard implements CanActivate {
     if (!token) throw new UnauthorizedException();
 
     let payload: AccessTokenPayload;
-    try {
-      payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
-    } catch {
-      throw new UnauthorizedException();
+    let keyPermissions: string[] | null = null;
+    if (token.startsWith(API_KEY_PREFIX)) {
+      // Keys can't touch sign-in, passwords, two-step codes or other keys.
+      if (/^\/api\/(auth|integrations\/api-keys)(\/|$)/.test(req.path))
+        throw new ForbiddenException('API keys can’t be used here');
+      // An API key acts as the person who made it, narrowed to the key's permissions.
+      const key = await this.prisma.apiKey.findUnique({ where: { keyHash: hashApiKey(token) } });
+      if (!key || key.revokedAt || (key.expiresAt && key.expiresAt <= new Date()))
+        throw new UnauthorizedException('This API key is not valid');
+      payload = { sub: key.createdById, tid: key.tenantId };
+      keyPermissions = key.permissions;
+      // At most one write a minute per key.
+      if (!key.lastUsedAt || Date.now() - key.lastUsedAt.getTime() > 60_000)
+        await this.prisma.apiKey.update({
+          where: { id: key.id },
+          data: { lastUsedAt: new Date() },
+        });
+    } else {
+      try {
+        payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
+      } catch {
+        throw new UnauthorizedException();
+      }
     }
 
     const [user, live] = await Promise.all([
@@ -72,6 +92,8 @@ export class AuthGuard implements CanActivate {
     for (const { role } of user.roles) {
       for (const p of role.permissions) if (isPermission(p)) permissions.add(p);
     }
+    if (keyPermissions)
+      for (const p of [...permissions]) if (!keyPermissions.includes(p)) permissions.delete(p);
 
     const store = requestContext.getStore();
     if (store) {

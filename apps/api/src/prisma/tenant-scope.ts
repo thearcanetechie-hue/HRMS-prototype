@@ -4,6 +4,9 @@ import { Prisma, PrismaClient } from '@prisma/client';
 export const TENANT_SCOPED_MODELS: ReadonlySet<Prisma.ModelName> = new Set<Prisma.ModelName>([
   'User',
   'SavedReport',
+  'WebhookEndpoint',
+  'WebhookDelivery',
+  'ApiKey',
   'Role',
   'UserRole',
   'Session',

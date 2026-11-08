@@ -29,6 +29,7 @@ export const PERMISSIONS = {
     'Post announcements and events, pin or remove posts, and run polls and pulse surveys',
   'analytics.read':
     'See company-wide reports: headcount, attrition, leave, attendance, overtime, claims, diversity and learning',
+  'integrations.manage': 'Connect Slack, Teams and other apps, manage webhooks and create API keys',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -68,6 +69,7 @@ export const SYSTEM_ROLES: Record<
       'learning.manage',
       'engagement.manage',
       'analytics.read',
+      'integrations.manage',
       'audit.read',
     ],
   },
