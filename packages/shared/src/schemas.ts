@@ -991,3 +991,53 @@ export const savedReportSchema = z.object({
   range: z.enum(REPORT_RANGES).default('12m'),
 });
 export type SavedReportInput = z.infer<typeof savedReportSchema>;
+
+// ---------- Integrations ----------
+
+/** Events other apps can subscribe to, by the audit action that raises them. */
+export const WEBHOOK_EVENTS = {
+  'employee.created': 'Someone is added',
+  'employee.updated': 'An employee record changes',
+  'employee.invited': 'Someone is invited to sign in',
+  'checklist.started': 'Onboarding or offboarding starts',
+  'checklist.completed': 'Onboarding or offboarding finishes',
+  'leave.requested': 'Leave is requested',
+  'leave.approved': 'Leave is approved',
+  'leave.rejected': 'Leave is declined',
+  'leave.cancelled': 'Leave is cancelled',
+  'attendance.month_closed': 'An attendance month is closed',
+  'payroll.run_locked': 'A payroll run is locked',
+  'payroll.run_paid': 'A payroll run is marked paid',
+  'claims.expense_requested': 'An expense claim is made',
+  'claims.overtime_requested': 'Overtime is claimed',
+  'document.uploaded': 'A document is uploaded',
+  'performance.kudos': 'Someone is thanked',
+  'engagement.posted': 'An announcement is posted',
+  'learning.completed': 'Someone completes a course',
+} as const;
+export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;
+export const WEBHOOK_EVENT_KEYS = Object.keys(WEBHOOK_EVENTS) as [WebhookEvent, ...WebhookEvent[]];
+
+export const WEBHOOK_FORMATS = ['JSON', 'SLACK', 'TEAMS'] as const;
+export type WebhookFormat = (typeof WEBHOOK_FORMATS)[number];
+
+export const createWebhookSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  url: z.string().trim().url('Enter the full web address, starting with https://').max(2000),
+  format: z.enum(WEBHOOK_FORMATS).default('JSON'),
+  events: z.array(z.enum(WEBHOOK_EVENT_KEYS)).min(1, 'Pick at least one event').max(50),
+});
+export type CreateWebhookInput = z.infer<typeof createWebhookSchema>;
+export const updateWebhookSchema = createWebhookSchema
+  .pick({ name: true, events: true })
+  .partial()
+  .extend({ active: z.boolean().optional() });
+export type UpdateWebhookInput = z.infer<typeof updateWebhookSchema>;
+
+export const createApiKeySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  permissions: z.array(z.string()).min(1, 'Pick at least one permission').max(50),
+  /** Empty means the key never expires. */
+  expiresInDays: z.coerce.number().int().min(1).max(730).optional(),
+});
+export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;

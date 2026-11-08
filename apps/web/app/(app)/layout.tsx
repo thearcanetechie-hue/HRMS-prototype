@@ -119,7 +119,12 @@ const NAV: { group: string; items: NavItem[] }[] = [
         icon: BarChart3,
         show: (can) => can('analytics.read'),
       },
-      { href: '/integrations', label: 'Integrations', icon: Plug, show: isHr },
+      {
+        href: '/integrations',
+        label: 'Integrations',
+        icon: Plug,
+        show: (can) => can('integrations.manage'),
+      },
       {
         href: '/policies',
         label: 'Policies',

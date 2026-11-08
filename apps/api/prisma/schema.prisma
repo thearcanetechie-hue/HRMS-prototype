@@ -120,6 +120,9 @@ model Tenant {
   payItems      PayItem[]
   settlements   Settlement[]
   savedReports  SavedReport[]
+  webhooks      WebhookEndpoint[]
+  webhookDeliveries WebhookDelivery[]
+  apiKeys       ApiKey[]
 }
 
 model User {
@@ -154,6 +157,8 @@ model User {
   recoveryCodes RecoveryCode[]
   identities  ExternalIdentity[]
   savedReports SavedReport[]
+  webhooks     WebhookEndpoint[]
+  apiKeys      ApiKey[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -1733,4 +1738,83 @@ model SavedReport {
   createdBy User?  @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([tenantId, createdAt])
+}
+
+enum WebhookFormat {
+  JSON
+  SLACK
+  TEAMS
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+/// Where HRMS sends events: Slack or Teams channels, or any app that takes a signed JSON webhook.
+model WebhookEndpoint {
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @db.Uuid
+  name        String
+  url         String
+  format      WebhookFormat @default(JSON)
+  /// Event names from WEBHOOK_EVENTS.
+  events      String[]
+  /// Signing secret (encrypted); JSON endpoints get an X-HRMS-Signature header made with it.
+  secretEnc   String
+  active      Boolean       @default(true)
+  createdById String?       @db.Uuid
+  createdAt   DateTime      @default(now())
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy  User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId])
+}
+
+/// One event sent (or waiting to be sent) to one endpoint. Failed sends are retried with backoff.
+model WebhookDelivery {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  endpointId    String         @db.Uuid
+  event         String
+  summary       String
+  payload       Json
+  status        DeliveryStatus @default(PENDING)
+  attempts      Int            @default(0)
+  nextAttemptAt DateTime       @default(now())
+  responseCode  Int?
+  error         String?
+  sentAt        DateTime?
+  createdAt     DateTime       @default(now())
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, createdAt])
+}
+
+/// A key for scripts and other apps to call the HRMS API. It acts as the person who made it,
+/// limited to the permissions picked (and to what that person can still do).
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  name        String
+  /// SHA-256 of the key; the key itself is shown once.
+  keyHash     String    @unique
+  keyPrefix   String
+  permissions String[]
+  createdById String    @db.Uuid
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }

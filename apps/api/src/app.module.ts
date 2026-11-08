@@ -11,6 +11,7 @@ import { PerformanceModule } from './performance/performance.module';
 import { LearningModule } from './learning/learning.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 import { InboxModule } from './inbox/inbox.module';
 import { PoliciesModule } from './policies/policies.module';
 import { AttendanceModule } from './attendance/attendance.module';
@@ -49,6 +50,7 @@ import { RolesModule } from './roles/roles.module';
     LearningModule,
     EngagementModule,
     AnalyticsModule,
+    IntegrationsModule,
     InboxModule,
     PoliciesModule,
   ],
