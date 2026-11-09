@@ -30,6 +30,8 @@ export const PERMISSIONS = {
   'analytics.read':
     'See company-wide reports: headcount, attrition, leave, attendance, overtime, claims, diversity and learning',
   'integrations.manage': 'Connect Slack, Teams and other apps, manage webhooks and create API keys',
+  'assessment.manage':
+    'Create tests and quizzes, assign them, mark written answers and see everyone’s results',
   'audit.read': 'View the audit log',
 } as const;
 
@@ -70,6 +72,7 @@ export const SYSTEM_ROLES: Record<
       'engagement.manage',
       'analytics.read',
       'integrations.manage',
+      'assessment.manage',
       'audit.read',
     ],
   },

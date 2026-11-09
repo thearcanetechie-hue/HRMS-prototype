@@ -1041,3 +1041,116 @@ export const createApiKeySchema = z.object({
   expiresInDays: z.coerce.number().int().min(1).max(730).optional(),
 });
 export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
+
+// ---------- Assessments ----------
+
+export const ASSESSMENT_PURPOSES = [
+  'GENERAL',
+  'TRAINING',
+  'HIRING',
+  'REVIEW',
+  'COMPLIANCE',
+] as const;
+export const RESULTS_VISIBILITY = ['AFTER_SUBMIT', 'AFTER_CLOSE', 'NEVER'] as const;
+export const QUESTION_KINDS = [
+  'SINGLE',
+  'MULTIPLE',
+  'TRUE_FALSE',
+  'NUMBER',
+  'SHORT',
+  'LONG',
+] as const;
+export type QuestionKind = (typeof QUESTION_KINDS)[number];
+
+export const assessmentSchema = z
+  .object({
+    title: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(4000).default(''),
+    purpose: z.enum(ASSESSMENT_PURPOSES).default('GENERAL'),
+    timeLimitMinutes: z.coerce.number().int().min(1).max(600).nullish(),
+    passPercent: z.coerce.number().int().min(0).max(100).default(60),
+    maxAttempts: z.coerce.number().int().min(1).max(20).default(1),
+    shuffle: z.boolean().default(false),
+    showResults: z.enum(RESULTS_VISIBILITY).default('AFTER_SUBMIT'),
+    opensAt: z.coerce.date().nullish(),
+    closesAt: z.coerce.date().nullish(),
+    courseId: z.string().uuid().nullish(),
+  })
+  .refine((a) => !a.opensAt || !a.closesAt || a.closesAt > a.opensAt, {
+    message: 'Closing time must be after opening time',
+    path: ['closesAt'],
+  });
+export type AssessmentInput = z.infer<typeof assessmentSchema>;
+export const updateAssessmentSchema = assessmentSchema.innerType().partial();
+export type UpdateAssessmentInput = z.infer<typeof updateAssessmentSchema>;
+
+const option = z.object({
+  id: z.string().trim().min(1).max(20),
+  text: z.string().trim().min(1).max(500),
+});
+
+/** One question as HR writes it. `answer` depends on the kind; LONG answers are marked by hand. */
+export const questionSchema = z
+  .object({
+    kind: z.enum(QUESTION_KINDS),
+    prompt: z.string().trim().min(1).max(4000),
+    options: z.array(option).max(12).default([]),
+    answer: z.union([
+      z.array(z.string().trim().min(1).max(500)).max(20),
+      z.object({ value: z.number(), tolerance: z.number().min(0).default(0) }),
+      z.null(),
+    ]),
+    points: z.coerce.number().int().min(0).max(100).default(1),
+    explanation: z.string().trim().max(2000).default(''),
+  })
+  .superRefine((q, ctx) => {
+    const ids = q.options.map((o) => o.id);
+    const fail = (message: string) => ctx.addIssue({ code: 'custom', message, path: ['answer'] });
+    if (['SINGLE', 'MULTIPLE', 'TRUE_FALSE'].includes(q.kind)) {
+      if (q.options.length < 2) return fail('Add at least two choices');
+      if (new Set(ids).size !== ids.length) return fail('Choices need different ids');
+      const a = Array.isArray(q.answer) ? q.answer : [];
+      if (!a.length || a.some((x) => !ids.includes(x))) return fail('Pick the right choice');
+      if (q.kind !== 'MULTIPLE' && a.length !== 1) return fail('Pick exactly one right choice');
+    } else if (q.kind === 'NUMBER') {
+      if (!q.answer || Array.isArray(q.answer)) return fail('Enter the right number');
+    } else if (q.kind === 'SHORT') {
+      if (q.answer !== null && !Array.isArray(q.answer)) return fail('List the accepted answers');
+    } else if (q.answer !== null) return fail('Written answers are marked by hand');
+  });
+export type QuestionInput = z.infer<typeof questionSchema>;
+export const questionsSchema = z.object({ questions: z.array(questionSchema).max(200) });
+
+export const assignAssessmentSchema = z
+  .object({
+    employeeIds: z.array(z.string().uuid()).max(5000).default([]),
+    departmentId: z.string().uuid().optional(),
+    everyone: z.boolean().default(false),
+    dueAt: z.coerce.date().nullish(),
+  })
+  .refine((a) => a.employeeIds.length || a.departmentId || a.everyone, {
+    message: 'Pick who should take it',
+    path: ['employeeIds'],
+  });
+export type AssignAssessmentInput = z.infer<typeof assignAssessmentSchema>;
+
+export const answerSchema = z.object({
+  questionId: z.string().uuid(),
+  /** Option ids, a typed answer, or a number. */
+  answer: z.union([z.array(z.string().max(20)).max(12), z.string().max(20000), z.number()]),
+});
+export type AnswerInput = z.infer<typeof answerSchema>;
+
+export const markAttemptSchema = z.object({
+  marks: z
+    .array(
+      z.object({
+        questionId: z.string().uuid(),
+        points: z.coerce.number().min(0).max(100),
+        feedback: z.string().trim().max(2000).default(''),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
+export type MarkAttemptInput = z.infer<typeof markAttemptSchema>;
