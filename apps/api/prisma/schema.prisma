@@ -123,6 +123,11 @@ model Tenant {
   webhooks      WebhookEndpoint[]
   webhookDeliveries WebhookDelivery[]
   apiKeys       ApiKey[]
+  assessments   Assessment[]
+  assessmentQuestions AssessmentQuestion[]
+  assessmentAssignments AssessmentAssignment[]
+  assessmentAttempts AssessmentAttempt[]
+  assessmentResponses AssessmentResponse[]
 }
 
 model User {
@@ -358,6 +363,8 @@ model Employee {
   @@index([tenantId, status])
   @@index([tenantId, departmentId])
   @@index([managerId])
+  assessmentAssignments AssessmentAssignment[]
+  assessmentAttempts AssessmentAttempt[]
 }
 
 /// Personal, statutory and bank details. Identifier columns ending in Enc hold
@@ -1073,6 +1080,7 @@ model Course {
   enrollments Enrollment[]
 
   @@index([tenantId, startsOn])
+  assessments  Assessment[]
 }
 
 model CourseSession {
@@ -1817,4 +1825,149 @@ model ApiKey {
   createdBy User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+}
+
+enum AssessmentPurpose {
+  GENERAL
+  TRAINING
+  HIRING
+  REVIEW
+  COMPLIANCE
+}
+
+enum AssessmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum ResultsVisibility {
+  AFTER_SUBMIT
+  AFTER_CLOSE
+  NEVER
+}
+
+enum QuestionKind {
+  SINGLE
+  MULTIPLE
+  TRUE_FALSE
+  NUMBER
+  SHORT
+  LONG
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  MARKED
+}
+
+/// A test or quiz: questions, a pass mark, an optional time limit and who has to take it.
+model Assessment {
+  id               String            @id @default(uuid()) @db.Uuid
+  tenantId         String            @db.Uuid
+  title            String
+  description      String            @default("")
+  purpose          AssessmentPurpose @default(GENERAL)
+  status           AssessmentStatus  @default(DRAFT)
+  timeLimitMinutes Int?
+  passPercent      Int               @default(60)
+  maxAttempts      Int               @default(1)
+  shuffle          Boolean           @default(false)
+  showResults      ResultsVisibility @default(AFTER_SUBMIT)
+  opensAt          DateTime?
+  closesAt         DateTime?
+  courseId         String?           @db.Uuid
+  createdById      String?           @db.Uuid
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  course      Course?                @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  questions   AssessmentQuestion[]
+  assignments AssessmentAssignment[]
+  attempts    AssessmentAttempt[]
+
+  @@index([tenantId, status])
+}
+
+model AssessmentQuestion {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @db.Uuid
+  assessmentId String       @db.Uuid
+  order        Int
+  kind         QuestionKind
+  prompt       String
+  /// Choices for SINGLE, MULTIPLE and TRUE_FALSE: [{ id, text }].
+  options      Json         @default("[]")
+  /// The right answer: option ids, accepted texts, or { value, tolerance }. Empty for LONG.
+  answer       Json         @default("null")
+  points       Int          @default(1)
+  explanation  String       @default("")
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assessment Assessment           @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  responses  AssessmentResponse[]
+
+  @@index([assessmentId, order])
+}
+
+model AssessmentAssignment {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  assessmentId String    @db.Uuid
+  employeeId   String    @db.Uuid
+  dueAt        DateTime?
+  createdAt    DateTime  @default(now())
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, employeeId])
+  @@index([tenantId, employeeId])
+}
+
+model AssessmentAttempt {
+  id            String        @id @default(uuid()) @db.Uuid
+  tenantId      String        @db.Uuid
+  assessmentId  String        @db.Uuid
+  employeeId    String        @db.Uuid
+  status        AttemptStatus @default(IN_PROGRESS)
+  /// Question ids in the order this person sees them.
+  questionOrder String[]
+  startedAt     DateTime      @default(now())
+  expiresAt     DateTime?
+  submittedAt   DateTime?
+  score         Decimal?      @db.Decimal(8, 2)
+  maxScore      Int           @default(0)
+  percent       Decimal?      @db.Decimal(5, 2)
+  passed        Boolean?
+  markedById    String?       @db.Uuid
+  markedAt      DateTime?
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assessment Assessment           @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  employee   Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  responses  AssessmentResponse[]
+
+  @@index([assessmentId, employeeId])
+}
+
+model AssessmentResponse {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  attemptId  String   @db.Uuid
+  questionId String   @db.Uuid
+  answer     Json
+  points     Decimal? @db.Decimal(8, 2)
+  autoMarked Boolean  @default(false)
+  feedback   String   @default("")
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempt  AssessmentAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
 }
