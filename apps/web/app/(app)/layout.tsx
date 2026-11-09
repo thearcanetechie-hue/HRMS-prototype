@@ -5,6 +5,7 @@ import {
   BarChart3,
   Bell,
   BookUser,
+  ClipboardCheck,
   Clock,
   FileText,
   Folder,
@@ -100,6 +101,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/performance', label: 'Performance', icon: Target, show: always },
       { href: '/learning', label: 'Learning', icon: GraduationCap, show: always },
+      { href: '/assessments', label: 'Assessments', icon: ClipboardCheck, show: always },
       { href: '/documents', label: 'Documents', icon: Folder, show: always },
     ],
   },
