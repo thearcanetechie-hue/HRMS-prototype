@@ -15,6 +15,7 @@ import {
   Phone,
 } from 'lucide-react';
 import Link from 'next/link';
+import { CustomFieldsCard } from '@/components/custom-fields';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityFeed } from './activity-log';
 import { ProfileAssetsCard } from './assets';
@@ -328,6 +329,12 @@ export function EmployeeProfileView({
               {personalCard}
               {jobCard}
               {statutoryCard}
+              <CustomFieldsCard
+                employeeId={employee.id}
+                values={employee.customFields ?? {}}
+                canEdit={editable && (self || can('employee.manage'))}
+                self={self || !can('employee.manage')}
+              />
             </div>
             <div className="grid content-start gap-5">
               <ProfileChecklistCard employee={employee} canManage={can('lifecycle.manage')} />

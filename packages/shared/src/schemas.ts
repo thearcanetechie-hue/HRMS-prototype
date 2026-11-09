@@ -1154,3 +1154,65 @@ export const markAttemptSchema = z.object({
     .max(200),
 });
 export type MarkAttemptInput = z.infer<typeof markAttemptSchema>;
+
+// ---------- Custom fields ----------
+
+export const CUSTOM_FIELD_TYPES = [
+  'TEXT',
+  'LONG_TEXT',
+  'NUMBER',
+  'DATE',
+  'SELECT',
+  'MULTI_SELECT',
+  'BOOLEAN',
+  'EMAIL',
+  'PHONE',
+  'URL',
+] as const;
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
+export const FIELD_VISIBILITY = ['HR_ONLY', 'MANAGERS', 'EVERYONE'] as const;
+
+export const customFieldSchema = z
+  .object({
+    label: z.string().trim().min(1).max(80),
+    /** Lower-case id used in imports and the API; made from the label when left out. */
+    key: z
+      .string()
+      .trim()
+      .regex(/^[a-z][a-z0-9_]{0,39}$/, 'Use lower-case letters, numbers and _')
+      .optional(),
+    type: z.enum(CUSTOM_FIELD_TYPES),
+    options: z.array(z.string().trim().min(1).max(80)).max(100).default([]),
+    required: z.boolean().default(false),
+    helpText: z.string().trim().max(300).default(''),
+    section: z.string().trim().min(1).max(60).default('Other details'),
+    visibility: z.enum(FIELD_VISIBILITY).default('MANAGERS'),
+    selfEditable: z.boolean().default(false),
+    order: z.coerce.number().int().min(0).max(1000).default(0),
+  })
+  .refine((f) => !['SELECT', 'MULTI_SELECT'].includes(f.type) || f.options.length >= 1, {
+    message: 'Add the choices people can pick from',
+    path: ['options'],
+  });
+export type CustomFieldInput = z.infer<typeof customFieldSchema>;
+/** The type and key can't change once values may exist. */
+export const updateCustomFieldSchema = customFieldSchema
+  .innerType()
+  .omit({ type: true, key: true })
+  .partial()
+  .extend({ archived: z.boolean().optional() });
+export type UpdateCustomFieldInput = z.infer<typeof updateCustomFieldSchema>;
+
+export const customFieldValuesSchema = z.object({
+  values: z.record(z.string(), z.unknown()),
+});
+
+/** "Blood donor?" -> "blood_donor" */
+export const fieldKey = (label: string) =>
+  label
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/^(\d)/, 'f_$1')
+    .slice(0, 40) || 'field';

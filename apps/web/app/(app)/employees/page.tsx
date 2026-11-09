@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Filter, Upload, UserPlus } from 'lucide-react';
+import { Download, Filter, Upload, UserPlus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
@@ -273,6 +273,11 @@ function Employees() {
         actions={
           manage && (
             <>
+              <Button asChild>
+                <Link href="/employees/fields">
+                  <SlidersHorizontal /> Custom fields
+                </Link>
+              </Button>
               <Button asChild>
                 <Link href="/onboarding/team">
                   <Upload /> Import

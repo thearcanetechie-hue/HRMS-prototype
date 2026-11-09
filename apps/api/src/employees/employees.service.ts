@@ -3,6 +3,7 @@ import type { CreateEmployeeInput, ListEmployeesQuery, UpdateEmployeeInput } fro
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
+import { CustomFieldsService } from './custom-fields.service';
 import { EmployeeAccess } from './employee-access.service';
 import { requireTenantId } from '../common/request-context';
 import { PrismaService } from '../prisma/prisma.service';
@@ -37,6 +38,7 @@ export class EmployeesService {
     private readonly audit: AuditService,
     private readonly access: EmployeeAccess,
     private readonly lifecycle: LifecycleService,
+    private readonly fields: CustomFieldsService,
   ) {}
 
   /** Full records for `employee.read`; otherwise the directory, which leaves out people who have left. */
@@ -68,7 +70,18 @@ export class EmployeesService {
       }),
       this.prisma.db.employee.count({ where }),
     ]);
-    return { items, total, page: q.page, pageSize: q.pageSize };
+    return {
+      items: full
+        ? await Promise.all(
+            items.map((e) =>
+              this.fields.visible(e as typeof e & { customFields: Prisma.JsonValue }),
+            ),
+          )
+        : items,
+      total,
+      page: q.page,
+      pageSize: q.pageSize,
+    };
   }
 
   async get(id: string) {
@@ -77,7 +90,7 @@ export class EmployeesService {
         where: { id },
         include: employeeInclude,
       });
-      if (employee) return employee;
+      if (employee) return this.fields.visible(employee);
     } else if (this.access.can('directory.read')) {
       const employee = await this.prisma.db.employee.findFirst({
         where: { id, status: { not: 'EXITED' } },
@@ -99,7 +112,8 @@ export class EmployeesService {
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
     });
     items.sort((a, b) => Number(b.managerId === self) - Number(a.managerId === self));
-    return { items: items.map((e) => ({ ...e, direct: e.managerId === self })) };
+    const shown = await Promise.all(items.map((e) => this.fields.visible(e)));
+    return { items: shown.map((e) => ({ ...e, direct: e.managerId === self })) };
   }
 
   private async getFull(id: string) {
@@ -113,6 +127,11 @@ export class EmployeesService {
 
   async create(input: CreateEmployeeInput) {
     await this.assertReferences(input);
+    if (Object.keys(input.customFields).length)
+      input = {
+        ...input,
+        customFields: await this.fields.validate(input.customFields, {}, { skipRequired: true }),
+      };
     const employee = await this.insertWithCode(input);
     await this.audit.record('employee.created', 'Employee', employee.id, {
       employeeCode: employee.employeeCode,
@@ -164,7 +183,17 @@ export class EmployeesService {
   }
 
   async update(id: string, input: UpdateEmployeeInput) {
-    await this.getFull(id);
+    const current = await this.getFull(id);
+    // Custom fields merge into what's there; send a key with null to clear it.
+    if (input.customFields)
+      input = {
+        ...input,
+        customFields: await this.fields.validate(
+          input.customFields,
+          (current.customFields ?? {}) as Record<string, unknown>,
+          { skipRequired: true },
+        ),
+      };
     if (input.managerId === id)
       throw new BadRequestException('An employee cannot manage themselves');
     await this.assertReferences(input);
