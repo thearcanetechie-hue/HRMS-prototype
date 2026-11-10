@@ -98,6 +98,8 @@ export interface Employee {
   manager: { id: string; firstName: string; lastName: string } | null;
   user?: { id: string; status: 'INVITED' | 'ACTIVE' | 'DISABLED' } | null;
   direct?: boolean;
+  /** Extra fields, by key: only the ones this viewer may see. */
+  customFields?: Record<string, unknown>;
 }
 
 export interface Address {

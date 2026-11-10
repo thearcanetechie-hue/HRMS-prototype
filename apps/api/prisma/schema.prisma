@@ -128,6 +128,7 @@ model Tenant {
   assessmentAssignments AssessmentAssignment[]
   assessmentAttempts AssessmentAttempt[]
   assessmentResponses AssessmentResponse[]
+  customFieldDefs CustomFieldDef[]
 }
 
 model User {
@@ -1970,4 +1971,48 @@ model AssessmentResponse {
   question AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([attemptId, questionId])
+}
+
+enum CustomFieldType {
+  TEXT
+  LONG_TEXT
+  NUMBER
+  DATE
+  SELECT
+  MULTI_SELECT
+  BOOLEAN
+  EMAIL
+  PHONE
+  URL
+}
+
+enum FieldVisibility {
+  HR_ONLY
+  MANAGERS
+  EVERYONE
+}
+
+/// An extra employee field a workspace adds. Values live in Employee.customFields under `key`.
+model CustomFieldDef {
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @db.Uuid
+  key          String
+  label        String
+  type         CustomFieldType
+  /// Choices for SELECT and MULTI_SELECT.
+  options      String[]
+  required     Boolean         @default(false)
+  helpText     String          @default("")
+  section      String          @default("Other details")
+  /// Who can see the value: HR only; HR, the person and their managers; or everyone.
+  visibility   FieldVisibility @default(MANAGERS)
+  /// The person can fill it in on their own profile.
+  selfEditable Boolean         @default(false)
+  order        Int             @default(0)
+  archived     Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
 }
